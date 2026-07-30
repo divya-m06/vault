@@ -42,31 +42,33 @@ export function UnlockPage({ onUnlock }) {
           }}
         />
 
-        <div className="relative z-10 flex flex-col h-full p-16">
+        <div className="relative z-10 flex min-h-full flex-col px-16 pt-16 pb-12">
           {/* Brand logo */}
-          <div className="flex items-center gap-3">
+          <div className="flex items-center gap-3.5">
             <span
-              className="material-symbols-outlined text-primary text-[32px] icon-filled"
+              className="material-symbols-outlined text-primary text-[40px] icon-filled"
               aria-hidden="true"
             >
               shield_lock
             </span>
-            <span className="text-headline-md text-primary font-semibold tracking-tight">Vault</span>
+            <span className="text-[26px] font-semibold tracking-tight text-primary">Vault</span>
           </div>
 
-          {/* Marketing copy */}
-          <div className="mt-auto mb-32 max-w-md">
-            <h2 className="text-[40px] font-semibold leading-tight text-on-surface tracking-tight mb-6">
-              Your digital life,<br />secured.
-            </h2>
-            <p className="text-body-lg text-on-surface-variant leading-relaxed">
-              Precision-engineered encryption for the modern professional. Access your sensitive data,
-              secure notes, and credentials within an isolated, zero-knowledge environment.
-            </p>
+          <div className="flex flex-1 flex-col justify-center">
+            {/* Marketing copy */}
+            <div className="max-w-md">
+              <h2 className="text-[50px] font-semibold leading-tight text-on-surface tracking-tight mb-5">
+                Your digital life,<br />secured.
+              </h2>
+              <p className="text-body-lg text-on-surface-variant leading-relaxed max-w-[30rem]">
+                Precision-engineered encryption for the modern professional. Access your sensitive data,
+                secure notes, and credentials within an isolated, zero-knowledge environment.
+              </p>
+            </div>
           </div>
 
           {/* Trust badges */}
-          <div className="flex flex-wrap gap-8 border-t border-outline-variant/40 pt-8 mt-auto text-on-surface-variant">
+          <div className="mt-8 flex flex-wrap gap-8 border-t border-outline-variant/40 pt-7 text-on-surface-variant">
             <div className="flex items-center gap-2">
               <span className="material-symbols-outlined text-[18px]" aria-hidden="true">verified_user</span>
               <span className="text-label-md">End-to-End Encrypted</span>
@@ -84,20 +86,20 @@ export function UnlockPage({ onUnlock }) {
       </div>
 
       {/* ── Right pane: login form ─────────────────────────────────────── */}
-      <div className="w-full lg:w-1/2 bg-surface-container-lowest flex items-center justify-center p-8 relative">
+      <div className="w-full lg:w-1/2 bg-surface-container-lowest flex items-center justify-center p-8 lg:px-10 relative">
         {/* Mobile brand header — only visible below lg */}
-        <div className="absolute top-8 left-8 lg:hidden flex items-center gap-2">
+        <div className="absolute top-8 left-8 lg:hidden flex items-center gap-3">
           <span
-            className="material-symbols-outlined text-primary text-[24px] icon-filled"
+            className="material-symbols-outlined text-primary text-[28px] icon-filled"
             aria-hidden="true"
           >
             shield_lock
           </span>
-          <span className="text-headline-sm text-primary font-semibold">Vault</span>
+          <span className="text-[22px] font-semibold tracking-tight text-primary">Vault</span>
         </div>
 
         {/* Form container */}
-        <div className="w-full max-w-[380px]">
+        <div className="w-full max-w-[460px]">
           {/* Heading */}
           <div className="mb-8 text-center lg:text-left">
             {/* Lock icon badge */}
