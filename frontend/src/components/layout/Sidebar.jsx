@@ -1,3 +1,5 @@
+import { useEffect, useRef, useState } from 'react'
+
 // Navigation items shown in the main section of the sidebar
 const NAV_ITEMS = [
   { id: 'all',       label: 'All Items',    icon: 'inventory_2' },
@@ -26,13 +28,46 @@ const FOOTER_ITEMS = [
  *   Desktop (md+) → fixed 240px column, always visible
  *   Mobile (<md)  → off-canvas drawer that slides in over a dimmed backdrop
  */
-export function Sidebar({ activeItem, onNavSelect, onLock, mobileOpen = false, onMobileClose }) {
+export function Sidebar({ activeItem, onNavSelect, onLock, mobileOpen = false, onMobileClose, onAddSelect }) {
+  const [isAddMenuOpen, setIsAddMenuOpen] = useState(false)
+  const addMenuRef = useRef(null)
+
   const handleSelect = (id) => {
     if (id === 'lock') {
       onLock?.()
     } else {
       onNavSelect(id)
     }
+    onMobileClose?.()
+  }
+
+  useEffect(() => {
+    if (!isAddMenuOpen) return
+
+    const handlePointerDown = (event) => {
+      if (addMenuRef.current && !addMenuRef.current.contains(event.target)) {
+        setIsAddMenuOpen(false)
+      }
+    }
+
+    const handleEscape = (event) => {
+      if (event.key === 'Escape') {
+        setIsAddMenuOpen(false)
+      }
+    }
+
+    document.addEventListener('mousedown', handlePointerDown)
+    document.addEventListener('keydown', handleEscape)
+
+    return () => {
+      document.removeEventListener('mousedown', handlePointerDown)
+      document.removeEventListener('keydown', handleEscape)
+    }
+  }, [isAddMenuOpen])
+
+  const handleAddSelect = (type) => {
+    setIsAddMenuOpen(false)
+    onAddSelect?.(type)
     onMobileClose?.()
   }
 
@@ -53,15 +88,42 @@ export function Sidebar({ activeItem, onNavSelect, onLock, mobileOpen = false, o
       </div>
 
       {/* ── Add Item button ─────────────────────────────────────────── */}
-      <div className="px-3 pt-3 pb-1 shrink-0">
+      <div className="px-3 pt-3 pb-1 shrink-0 relative" ref={addMenuRef}>
         <button
           id="sidebar-add-item-btn"
           className="btn-primary w-full h-9 text-label-md"
           aria-label="Add new vault item"
+          aria-expanded={isAddMenuOpen}
+          aria-haspopup="menu"
+          onClick={() => setIsAddMenuOpen((open) => !open)}
         >
           <span className="material-symbols-outlined text-[18px]" aria-hidden="true">add</span>
           Add Item
         </button>
+
+        {isAddMenuOpen && (
+          <div className="absolute left-3 right-3 top-full z-50 mt-2 rounded-xl border border-outline-variant bg-surface-container-lowest p-1.5 shadow-[0_12px_30px_-16px_rgba(15,23,42,0.35)]" role="menu" aria-label="Add to Vault">
+            <div className="border-b border-outline-variant/70 px-2 pb-2 mb-1">
+              <p className="text-label-md text-on-surface-variant">Add to Vault</p>
+            </div>
+            {[
+              { id: 'password', label: 'Password', icon: 'lock' },
+              { id: 'note', label: 'Secure Note', icon: 'description' },
+              { id: 'file', label: 'File', icon: 'folder_open' }
+            ].map((item) => (
+              <button
+                key={item.id}
+                type="button"
+                role="menuitem"
+                onClick={() => handleAddSelect(item.id)}
+                className="flex w-full items-center gap-2 rounded-lg px-3 py-2 text-left text-body-md text-on-surface transition-colors hover:bg-secondary-container/40 focus:outline-none focus-visible:ring-2 focus-visible:ring-primary-container"
+              >
+                <span className="material-symbols-outlined text-[18px] text-on-surface-variant" aria-hidden="true">{item.icon}</span>
+                <span>{item.label}</span>
+              </button>
+            ))}
+          </div>
+        )}
       </div>
 
       {/* ── Main navigation ─────────────────────────────────────────── */}
@@ -93,7 +155,10 @@ export function Sidebar({ activeItem, onNavSelect, onLock, mobileOpen = false, o
             key={item.id}
             id={`nav-${item.id}`}
             onClick={() => handleSelect(item.id)}
-            className="nav-item w-full text-left"
+            disabled={item.id === 'lock'}
+            className={`nav-item w-full text-left ${activeItem === item.id ? 'nav-item-active' : ''} ${item.id === 'lock' ? 'opacity-70 cursor-not-allowed' : ''}`}
+            aria-current={activeItem === item.id ? 'page' : undefined}
+            aria-disabled={item.id === 'lock' ? 'true' : undefined}
           >
             <span className="material-symbols-outlined text-[20px]" aria-hidden="true">
               {item.icon}

@@ -54,18 +54,18 @@ export function TopBar({ onMenuToggle, searchValue, onSearchChange }) {
         {/* Sync status badge (hidden on small screens to save space) */}
         <div
           className="hidden sm:flex items-center gap-1.5 text-primary"
-          title="All changes saved"
-          aria-label="Vault synced"
+          title="Stored locally on this device"
+          aria-label="Vault available offline"
         >
           <span className="w-2 h-2 rounded-full bg-primary block" aria-hidden="true" />
-          <span className="text-label-md font-medium">Synced</span>
+          <span className="text-label-md font-medium">Available Offline</span>
         </div>
 
-        <button id="topbar-sync-btn" className="btn-icon" aria-label="Sync vault" title="Sync vault">
+        <button id="topbar-sync-btn" className="btn-icon" aria-label="Sync vault" title="Sync vault" disabled>
           <span className="material-symbols-outlined text-[20px]" aria-hidden="true">sync</span>
         </button>
 
-        <button id="topbar-account-btn" className="btn-icon" aria-label="Account settings" title="Account">
+        <button id="topbar-account-btn" className="btn-icon cursor-not-allowed opacity-60" aria-label="Account settings" title="Accounts are not available in Stage 1" type="button">
           <span className="material-symbols-outlined text-[20px]" aria-hidden="true">account_circle</span>
         </button>
       </div>

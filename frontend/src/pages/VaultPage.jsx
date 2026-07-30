@@ -1,4 +1,4 @@
-import { useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import { useLiveQuery } from 'dexie-react-hooks'
 import { db } from '../db/db.js'
 import { Sidebar } from '../components/layout/Sidebar.jsx'
@@ -9,6 +9,7 @@ import { NoteForm } from '../components/Vault/NoteForm.jsx'
 import { NoteDetail } from '../components/Vault/NoteDetail.jsx'
 import { FileForm } from '../components/Vault/FileForm.jsx'
 import { FileDetail } from '../components/Vault/FileDetail.jsx'
+import { Settings } from '../components/Vault/Settings.jsx'
 
 /** Returns the Material Symbol icon name for each item type */
 function itemIcon(type) {
@@ -66,6 +67,9 @@ export function VaultPage({ onLock }) {
 
   // Inline error state for quota/storage issues
   const [storageError, setStorageError] = useState(null)
+  const [isUploadModalOpen, setIsUploadModalOpen] = useState(false)
+  const [isAddMenuOpen, setIsAddMenuOpen] = useState(false)
+  const addMenuRef = useRef(null)
 
   // Fetch all collections from Dexie.
   const rawPasswords = useLiveQuery(() => db.passwords.toArray()) || []
@@ -105,6 +109,63 @@ export function VaultPage({ onLock }) {
     return 'add_password' // default for 'all' and 'passwords'
   }
 
+  const handleOpenUploadModal = () => {
+    setStorageError(null)
+    setSelectedItemId(null)
+    setCurrentView('list')
+    setIsUploadModalOpen(true)
+  }
+
+  useEffect(() => {
+    if (!isAddMenuOpen) return
+
+    const handlePointerDown = (event) => {
+      if (addMenuRef.current && !addMenuRef.current.contains(event.target)) {
+        setIsAddMenuOpen(false)
+      }
+    }
+
+    const handleEscape = (event) => {
+      if (event.key === 'Escape') {
+        setIsAddMenuOpen(false)
+      }
+    }
+
+    document.addEventListener('mousedown', handlePointerDown)
+    document.addEventListener('keydown', handleEscape)
+
+    return () => {
+      document.removeEventListener('mousedown', handlePointerDown)
+      document.removeEventListener('keydown', handleEscape)
+    }
+  }, [isAddMenuOpen])
+
+  const handleCreateItem = (type) => {
+    setStorageError(null)
+    setSelectedItemId(null)
+    setIsAddMenuOpen(false)
+
+    if (type === 'password') {
+      setActiveNav('passwords')
+      setCurrentView('add_password')
+    } else if (type === 'note') {
+      setActiveNav('notes')
+      setCurrentView('add_note')
+    } else if (type === 'file') {
+      setActiveNav('files')
+      handleOpenUploadModal()
+    }
+  }
+
+  const handleOpenAddPicker = () => {
+    setIsAddMenuOpen(true)
+  }
+
+  const handleCloseUploadModal = () => {
+    setIsUploadModalOpen(false)
+    setStorageError(null)
+  }
+
   // Generic Save Handler for all types
   const handleSave = async (formData, specificType = null) => {
     setStorageError(null)
@@ -119,7 +180,9 @@ export function VaultPage({ onLock }) {
         else if (currentView.includes('file')) opType = 'file'
       }
 
-      if (currentView.startsWith('add')) {
+      const isCreating = Boolean(specificType) || currentView.startsWith('add')
+
+      if (isCreating) {
         const payload = {
           id: crypto.randomUUID(),
           ...formData,
@@ -141,8 +204,12 @@ export function VaultPage({ onLock }) {
         else if (selectedItem.type === 'file') await db.files.update(selectedItem.id, payload)
       }
       
+      if (opType === 'file') {
+        setIsUploadModalOpen(false)
+      }
+
       // Return to list or detail view
-      if (currentView.startsWith('add')) {
+      if (isCreating) {
         setCurrentView('list')
       } else {
         setCurrentView('detail')
@@ -193,6 +260,9 @@ export function VaultPage({ onLock }) {
 
   // Renders the main content area based on currentView
   const renderMainContent = () => {
+    if (activeNav === 'settings') {
+      return <Settings />
+    }
     
     // RENDER FORMS
     if (currentView === 'add_password' || currentView === 'edit_password') {
@@ -200,25 +270,6 @@ export function VaultPage({ onLock }) {
     }
     if (currentView === 'add_note' || currentView === 'edit_note') {
       return <NoteForm initialData={currentView === 'edit_note' ? selectedItem : null} onSave={handleSave} onCancel={() => setCurrentView(currentView === 'add_note' ? 'list' : 'detail')} />
-    }
-    if (currentView === 'add_file') {
-      return (
-        <div className="flex-1 w-full max-w-[800px] mx-auto flex flex-col relative">
-           {storageError && (
-            <div className="mx-4 mt-4 p-4 rounded-lg bg-error-container text-on-error-container border border-error/20 flex items-start gap-3 shadow-sm animate-[fadeIn_0.2s_ease-out]">
-              <span className="material-symbols-outlined text-error">error</span>
-              <div className="flex-1">
-                <p className="font-label-bold text-label-bold mb-1">Upload Failed</p>
-                <p className="font-body-sm text-body-sm">{storageError}</p>
-              </div>
-              <button onClick={() => setStorageError(null)} className="opacity-70 hover:opacity-100">
-                <span className="material-symbols-outlined text-[18px]">close</span>
-              </button>
-            </div>
-          )}
-          <FileForm onSave={handleSave} onCancel={() => setCurrentView('list')} />
-        </div>
-      )
     }
 
     // RENDER DETAILS
@@ -235,7 +286,7 @@ export function VaultPage({ onLock }) {
     }
 
     // Default 'list' view
-    return (
+    const listContent = (
       <div className="max-w-[1200px] mx-auto relative">
         {/* Storage Error Banner on List (if deletion failed) */}
         {storageError && (
@@ -259,23 +310,57 @@ export function VaultPage({ onLock }) {
              activeNav === 'notes'     ? 'Secure Notes' :
              activeNav === 'files'     ? 'Files'        : 'Settings'}
           </h2>
-          <button
-            id="vault-new-item-btn"
-            className="btn-primary flex items-center gap-2"
-            aria-label="Add new vault item"
-            onClick={() => {
-              setStorageError(null)
-              setSelectedItemId(null)
-              setCurrentView(getAddViewType())
-            }}
-          >
-            <span className="material-symbols-outlined text-[18px]" aria-hidden="true">
-              {activeNav === 'files' ? 'upload_file' : 'add'}
-            </span>
-            <span className="hidden sm:inline">
-              {activeNav === 'files' ? 'Upload File' : 'New Item'}
-            </span>
-          </button>
+          <div className="relative" ref={addMenuRef}>
+            <button
+              id="vault-new-item-btn"
+              className="btn-primary flex items-center gap-2"
+              aria-label="Add new vault item"
+              aria-expanded={isAddMenuOpen}
+              aria-haspopup="menu"
+              onClick={() => {
+                if (activeNav === 'passwords') {
+                  handleCreateItem('password')
+                } else if (activeNav === 'notes') {
+                  handleCreateItem('note')
+                } else if (activeNav === 'files') {
+                  handleCreateItem('file')
+                } else {
+                  handleOpenAddPicker()
+                }
+              }}
+            >
+              <span className="material-symbols-outlined text-[18px]" aria-hidden="true">
+                {activeNav === 'files' ? 'upload_file' : 'add'}
+              </span>
+              <span className="hidden sm:inline">
+                {activeNav === 'passwords' ? 'New Password' : activeNav === 'notes' ? 'New Secure Note' : activeNav === 'files' ? 'Upload File' : 'New Item'}
+              </span>
+            </button>
+
+            {isAddMenuOpen && activeNav === 'all' && (
+              <div className="absolute right-0 top-full z-50 mt-2 w-52 rounded-xl border border-outline-variant bg-surface-container-lowest p-1.5 shadow-[0_12px_30px_-16px_rgba(15,23,42,0.35)]" role="menu" aria-label="Add to Vault">
+                <div className="border-b border-outline-variant/70 px-2 pb-2 mb-1">
+                  <p className="text-label-md text-on-surface-variant">Add to Vault</p>
+                </div>
+                {[
+                  { id: 'password', label: 'Password', icon: 'lock' },
+                  { id: 'note', label: 'Secure Note', icon: 'description' },
+                  { id: 'file', label: 'File', icon: 'folder_open' }
+                ].map((item) => (
+                  <button
+                    key={item.id}
+                    type="button"
+                    role="menuitem"
+                    onClick={() => handleCreateItem(item.id)}
+                    className="flex w-full items-center gap-2 rounded-lg px-3 py-2 text-left text-body-md text-on-surface transition-colors hover:bg-secondary-container/40 focus:outline-none focus-visible:ring-2 focus-visible:ring-primary-container"
+                  >
+                    <span className="material-symbols-outlined text-[18px] text-on-surface-variant" aria-hidden="true">{item.icon}</span>
+                    <span>{item.label}</span>
+                  </button>
+                ))}
+              </div>
+            )}
+          </div>
         </div>
 
         {/* Item table */}
@@ -290,34 +375,49 @@ export function VaultPage({ onLock }) {
 
           {/* Rows */}
           {filtered.length === 0 ? (
-            <div className="py-20 text-center text-on-surface-variant flex flex-col items-center justify-center">
-              <span className="material-symbols-outlined text-[48px] block mb-4 text-outline-variant" aria-hidden="true">
-                {search ? 'search_off' : activeNav === 'files' ? 'cloud_upload' : 'vault'}
-              </span>
-              <h3 className="font-headline-sm text-headline-sm text-on-surface mb-2">
-                {search ? 'No items match your search.' : `No ${activeNav} yet.`}
-              </h3>
-              {!search && (
-                <p className="font-body-md text-body-md text-on-surface-variant mb-6 max-w-sm">
-                  {activeNav === 'files' 
-                    ? 'Upload documents or images to securely store them offline.'
-                    : 'Add items to start securing your digital life.'}
-                </p>
-              )}
-              {!search && (
-                <button
-                  className="btn-primary flex items-center gap-2"
-                  onClick={() => {
-                    setSelectedItemId(null)
-                    setCurrentView(getAddViewType())
-                  }}
-                >
-                  <span className="material-symbols-outlined text-[18px]">
-                    {activeNav === 'files' ? 'upload_file' : 'add'}
+            <div className="flex min-h-[280px] items-center justify-center border-t border-outline-variant/70 bg-surface-container-lowest px-6 py-10">
+              <div className="flex max-w-md flex-col items-center text-center">
+                <div className="mb-3 flex h-10 w-10 items-center justify-center rounded-full bg-surface-container-high text-on-surface-variant">
+                  <span className="material-symbols-outlined text-[20px]" aria-hidden="true">
+                    {search ? 'search_off' : activeNav === 'passwords' ? 'lock' : activeNav === 'notes' ? 'description' : activeNav === 'files' ? 'folder_open' : 'inventory_2'}
                   </span>
-                  {activeNav === 'files' ? 'Upload File' : 'Add Item'}
-                </button>
-              )}
+                </div>
+                <h3 className="text-label-bold text-on-surface">
+                  {search ? 'No items match your search.' : activeNav === 'passwords' ? 'No passwords yet' : activeNav === 'notes' ? 'No secure notes yet' : activeNav === 'files' ? 'No files yet' : 'Your vault is empty'}
+                </h3>
+                {!search && (
+                  <p className="mt-1 max-w-sm text-body-sm text-on-surface-variant">
+                    {activeNav === 'passwords'
+                      ? 'Add your first login to keep your credentials organized and available offline.'
+                      : activeNav === 'notes'
+                        ? 'Keep private notes organized and available whenever you need them.'
+                        : activeNav === 'files'
+                          ? "Store important files locally so they're available even without an internet connection."
+                          : 'Add a password, secure note, or file to get started.'}
+                  </p>
+                )}
+                {!search && (
+                  <button
+                    className="btn-primary mt-4 flex items-center gap-2"
+                    onClick={() => {
+                      if (activeNav === 'passwords') {
+                        handleCreateItem('password')
+                      } else if (activeNav === 'notes') {
+                        handleCreateItem('note')
+                      } else if (activeNav === 'files') {
+                        handleCreateItem('file')
+                      } else {
+                        handleOpenAddPicker()
+                      }
+                    }}
+                  >
+                    <span className="material-symbols-outlined text-[18px]" aria-hidden="true">
+                      {activeNav === 'files' ? 'upload_file' : 'add'}
+                    </span>
+                    {activeNav === 'passwords' ? 'New Password' : activeNav === 'notes' ? 'New Secure Note' : activeNav === 'files' ? 'Upload File' : 'Add Item'}
+                  </button>
+                )}
+              </div>
             </div>
           ) : (
             <ul role="list" aria-label="Vault items list" className="divide-y divide-outline-variant/60">
@@ -388,6 +488,27 @@ export function VaultPage({ onLock }) {
         )}
       </div>
     )
+
+    if (isUploadModalOpen && activeNav === 'files') {
+      return (
+        <div className="relative">
+          {listContent}
+          <div className="fixed inset-0 z-40 bg-[#171c25]/45" />
+          <div className="fixed inset-0 z-50 flex items-center justify-center p-3 sm:p-6">
+            <div className="max-h-[92dvh] w-full max-w-[520px] overflow-hidden rounded-[20px] border border-outline-variant bg-surface-container-lowest shadow-[0_24px_64px_-20px_rgba(15,23,42,0.35)]">
+              <FileForm
+                onSave={handleSave}
+                onCancel={handleCloseUploadModal}
+                errorMessage={storageError}
+                onClearError={() => setStorageError(null)}
+              />
+            </div>
+          </div>
+        </div>
+      )
+    }
+
+    return listContent
   }
 
   // Handle navigation from sidebar to ensure we go back to list and clear search
@@ -407,6 +528,7 @@ export function VaultPage({ onLock }) {
         onLock={onLock}
         mobileOpen={mobileMenuOpen}
         onMobileClose={() => setMobileMenuOpen(false)}
+        onAddSelect={handleCreateItem}
       />
 
       {/* Main content — offset by sidebar width on desktop */}
