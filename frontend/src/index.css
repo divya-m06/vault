@@ -1,0 +1,120 @@
+@import url('https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:opsz,wght,FILL,GRAD@20..48,100..700,0..1,-50..200&display=swap');
+@import url('https://fonts.googleapis.com/css2?family=Geist:wght@400;500;600&family=Geist+Mono:wght@400;500&family=Inter:wght@400;500;600&display=swap');
+
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+/* ── Base Resets ──────────────────────────────────────────── */
+@layer base {
+  *, *::before, *::after {
+    box-sizing: border-box;
+  }
+
+  html, body, #root {
+    height: 100%;
+    margin: 0;
+    padding: 0;
+  }
+
+  body {
+    @apply bg-surface text-on-surface font-sans antialiased;
+    -webkit-font-smoothing: antialiased;
+    -moz-osx-font-smoothing: grayscale;
+  }
+
+  /* Material Symbols base settings */
+  .material-symbols-outlined {
+    font-variation-settings: 'FILL' 0, 'wght' 400, 'GRAD' 0, 'opsz' 24;
+    font-size: 20px;
+    line-height: 1;
+    user-select: none;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    flex-shrink: 0;
+  }
+
+  /* Filled variant helper class */
+  .icon-filled {
+    font-variation-settings: 'FILL' 1, 'wght' 400, 'GRAD' 0, 'opsz' 24;
+  }
+
+  /* Scrollbars — thin and subtle */
+  ::-webkit-scrollbar {
+    width: 6px;
+    height: 6px;
+  }
+  ::-webkit-scrollbar-track {
+    background: transparent;
+  }
+  ::-webkit-scrollbar-thumb {
+    @apply bg-outline-variant rounded-full;
+  }
+  ::-webkit-scrollbar-thumb:hover {
+    @apply bg-outline;
+  }
+}
+
+/* ── Component utilities ──────────────────────────────────── */
+@layer components {
+  /* Focus ring — accessible, design-compliant */
+  .focus-ring {
+    @apply focus:outline-none focus:ring-2 focus:ring-primary-container focus:ring-offset-1 focus:ring-offset-surface-container-lowest;
+  }
+
+  /* Input field — default state */
+  .vault-input {
+    @apply w-full bg-surface-container-lowest border border-outline-variant rounded-md
+           px-4 py-2.5 text-body-md text-on-surface placeholder:text-on-surface-variant/60
+           transition-colors duration-150
+           focus:outline-none focus:border-primary-container focus:ring-1 focus:ring-primary-container;
+  }
+
+  /* Primary button */
+  .btn-primary {
+    @apply inline-flex items-center justify-center gap-2
+           bg-primary-container text-on-primary font-sans font-semibold text-label-md
+           px-4 py-2 rounded-md
+           hover:bg-primary transition-colors duration-150
+           focus:outline-none focus:ring-2 focus:ring-primary-container focus:ring-offset-2 focus:ring-offset-surface-container-lowest
+           disabled:opacity-50 disabled:cursor-not-allowed;
+  }
+
+  /* Ghost/secondary button */
+  .btn-secondary {
+    @apply inline-flex items-center justify-center gap-2
+           bg-transparent border border-outline-variant text-on-surface-variant font-sans font-medium text-label-md
+           px-4 py-2 rounded-md
+           hover:bg-surface-container hover:text-on-surface transition-colors duration-150
+           focus:outline-none focus:ring-2 focus:ring-primary-container focus:ring-offset-1;
+  }
+
+  /* Icon button */
+  .btn-icon {
+    @apply inline-flex items-center justify-center
+           w-8 h-8 rounded-md text-on-surface-variant
+           hover:bg-surface-container hover:text-on-surface transition-colors duration-150
+           focus:outline-none focus:ring-2 focus:ring-primary-container;
+  }
+
+  /* Sidebar nav item */
+  .nav-item {
+    @apply flex items-center gap-3 px-3 py-2 rounded-md
+           text-body-md text-on-surface-variant
+           hover:bg-surface-container-high hover:text-on-surface
+           transition-colors duration-150 cursor-pointer select-none;
+  }
+
+  .nav-item-active {
+    @apply bg-secondary-container text-on-secondary-container font-semibold;
+  }
+
+  /* Table row */
+  .vault-row {
+    @apply grid items-center h-10 px-4 gap-4
+           border-b border-outline-variant/60 last:border-b-0
+           hover:bg-secondary-container/30 transition-colors duration-100 cursor-pointer
+           group;
+  }
+}
