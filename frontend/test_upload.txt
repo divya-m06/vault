@@ -1,3 +1,0 @@
-This is a test file for vault upload functionality.
-Created to verify that file encryption and CRUD operations work correctly.
-The file should be encrypted and stored locally in IndexedDB.
