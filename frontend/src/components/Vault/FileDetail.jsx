@@ -43,7 +43,7 @@ export function FileDetail({ item, onDelete, onBack }) {
   })
 
   // Basic check if it's an image we can preview directly
-  const isImage = item.type && item.type.startsWith('image/')
+  const isImage = item.mimeType && item.mimeType.startsWith('image/')
 
   return (
     <div className="flex-1 flex flex-col p-container-padding overflow-y-auto w-full max-w-[800px] mx-auto">
@@ -67,7 +67,7 @@ export function FileDetail({ item, onDelete, onBack }) {
             <div className="min-w-0">
               <h2 className="font-headline-lg text-headline-lg text-[#022B3A] m-0 truncate" title={item.name}>{item.name}</h2>
               <div className="font-body-sm text-body-sm text-on-surface-variant mt-1 flex items-center gap-2">
-                <span>{item.type || 'Unknown Type'}</span>
+                <span>{item.mimeType || 'Unknown Type'}</span>
                 <span>&bull;</span>
                 <span>{formatSize(item.size)}</span>
               </div>

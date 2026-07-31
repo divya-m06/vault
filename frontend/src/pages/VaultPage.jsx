@@ -174,6 +174,15 @@ export function VaultPage({ onLock }) {
     setStorageError(null)
   }
 
+  // Reload items from IndexedDB after CRUD operations
+  const reloadAllItems = async () => {
+    const key = getActiveVaultSession()?.key
+    if (key) {
+      const items = await loadVaultItems(key)
+      setAllItems(items)
+    }
+  }
+
   // Generic Save Handler for all types
   const handleSave = async (formData, specificType = null) => {
     setStorageError(null)
@@ -201,13 +210,11 @@ export function VaultPage({ onLock }) {
           updatedAt: now
         }
 
-        const saved = opType === 'file'
+        opType === 'file'
           ? await saveVaultItem('file', { ...payload, blob: formData.blob }, key)
           : opType === 'note'
             ? await saveVaultItem('note', payload, key)
             : await saveVaultItem('password', payload, key)
-
-        setAllItems((prev) => [saved, ...prev])
       } else if (currentView.startsWith('edit') && selectedItem) {
         const payload = {
           ...formData,
@@ -216,13 +223,11 @@ export function VaultPage({ onLock }) {
           updatedAt: now
         }
 
-        const saved = selectedItem.type === 'file'
+        selectedItem.type === 'file'
           ? await updateVaultItem('file', { ...payload, blob: formData.blob }, key)
           : selectedItem.type === 'note'
             ? await updateVaultItem('note', payload, key)
             : await updateVaultItem('password', payload, key)
-
-        setAllItems((prev) => prev.map((item) => item.id === saved.id ? { ...item, ...saved } : item))
       }
 
       if (opType === 'file') {
@@ -234,6 +239,9 @@ export function VaultPage({ onLock }) {
       } else {
         setCurrentView('detail')
       }
+
+      // Reload items from IndexedDB to reflect changes immediately
+      await reloadAllItems()
     } catch (error) {
       console.error('Failed to save item:', error)
       if (error.name === 'QuotaExceededError' || error.message.includes('Quota')) {
@@ -251,9 +259,11 @@ export function VaultPage({ onLock }) {
       else if (type === 'note') await deleteVaultItem('note', id)
       else if (type === 'file') await deleteVaultItem('file', id)
 
-      setAllItems((prev) => prev.filter((item) => item.id !== id))
       setSelectedItemId(null)
       setCurrentView('list')
+
+      // Reload items from IndexedDB to reflect changes immediately
+      await reloadAllItems()
     } catch (error) {
       console.error('Delete failed:', error)
       setStorageError(`Failed to delete: ${error.message}`)
@@ -274,7 +284,7 @@ export function VaultPage({ onLock }) {
   const getItemDetailsText = (item) => {
     if (item.type === 'password') return item.username || '—'
     if (item.type === 'note') return 'Secure Note'
-    if (item.type === 'file') return `${shortFileType(item.type)} · ${formatSize(item.size)}`
+    if (item.type === 'file') return `${shortFileType(item.mimeType)} · ${formatSize(item.size)}`
     return '—'
   }
 

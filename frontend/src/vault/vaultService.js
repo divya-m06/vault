@@ -248,7 +248,7 @@ export async function loadVaultItems(key) {
         const item = buildPlainItem(payload, type)
         if (item) {
           if (type === 'file') {
-            item.blob = new Blob([toArrayBuffer(payload.fileBytes || payload.blob || new ArrayBuffer(0))], { type: payload.type || 'application/octet-stream' })
+            item.blob = new Blob([toArrayBuffer(payload.fileBytes || payload.blob || new ArrayBuffer(0))], { type: payload.mimeType || 'application/octet-stream' })
           }
           decrypted.push(item)
         }
@@ -287,7 +287,7 @@ export async function saveVaultItem(type, payload, key) {
     const itemPayload = {
       id: recordId,
       name: payload.name,
-      type: payload.type,
+      mimeType: payload.type,
       size: payload.size,
       description: payload.description,
       fileBytes,
@@ -329,7 +329,7 @@ export async function updateVaultItem(type, payload, key) {
     const itemPayload = {
       id: data.id,
       name: payload.name,
-      type: payload.type,
+      mimeType: payload.type,
       size: payload.size,
       description: payload.description,
       fileBytes,

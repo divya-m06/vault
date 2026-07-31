@@ -1,5 +1,6 @@
 import { useState } from 'react'
 import { ConfirmDialog } from '../ui/ConfirmDialog.jsx'
+import { calculatePasswordStrength, getStrengthBarColor } from '../../utils/passwordStrength.js'
 
 /**
  * Detail view for a password entry.
@@ -38,16 +39,24 @@ export function PasswordDetail({ item, onEdit, onDelete, onBack }) {
     year: 'numeric', month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit'
   })
 
-  // A simple placeholder for strength
+  // Calculate and display password strength
   const getStrengthUI = () => {
-    // For Stage 1 we'll just hardcode it to "Strong" visually since we aren't grading passwords yet.
+    const strength = calculatePasswordStrength(item.password)
+    const barColor = getStrengthBarColor(strength.level)
+    const filledBars = strength.score
+    const emptyBars = 4 - strength.score
+
     return (
       <div className="mt-2 flex items-center gap-2">
-        <span className="inline-flex w-16 h-1 bg-[#1F7A8C] rounded-full"></span>
-        <span className="inline-flex w-16 h-1 bg-[#1F7A8C] rounded-full"></span>
-        <span className="inline-flex w-16 h-1 bg-[#1F7A8C] rounded-full"></span>
-        <span className="inline-flex w-16 h-1 bg-outline-variant rounded-full"></span>
-        <span className="font-label-md text-label-md text-on-surface-variant ml-1">Strong</span>
+        {/* Filled strength bars */}
+        {Array(filledBars).fill(0).map((_, i) => (
+          <span key={`filled-${i}`} className={`inline-flex w-16 h-1 ${barColor} rounded-full`}></span>
+        ))}
+        {/* Empty strength bars */}
+        {Array(emptyBars).fill(0).map((_, i) => (
+          <span key={`empty-${i}`} className="inline-flex w-16 h-1 bg-outline-variant rounded-full"></span>
+        ))}
+        <span className="font-label-md text-label-md text-on-surface-variant ml-1">{strength.level}</span>
       </div>
     )
   }
