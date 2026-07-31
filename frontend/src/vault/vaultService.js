@@ -31,6 +31,30 @@ function toHex(bytes) {
   return Array.from(asUint8Array(bytes)).map((byte) => byte.toString(16).padStart(2, '0')).join('')
 }
 
+function arrayBufferToBase64(buffer) {
+  const bytes = new Uint8Array(buffer)
+  let binary = ''
+  for (let i = 0; i < bytes.byteLength; i++) {
+    binary += String.fromCharCode(bytes[i])
+  }
+  return btoa(binary)
+}
+
+function base64ToArrayBuffer(base64) {
+  if (!base64 || typeof base64 !== 'string') return new ArrayBuffer(0)
+  try {
+    const binary = atob(base64)
+    const bytes = new Uint8Array(binary.length)
+    for (let i = 0; i < binary.length; i++) {
+      bytes[i] = binary.charCodeAt(i)
+    }
+    return bytes.buffer
+  } catch (error) {
+    console.error('Failed to decode base64 file bytes:', error)
+    return new ArrayBuffer(0)
+  }
+}
+
 export function getActiveVaultSession() {
   return activeSession
 }
@@ -248,7 +272,20 @@ export async function loadVaultItems(key) {
         const item = buildPlainItem(payload, type)
         if (item) {
           if (type === 'file') {
-            item.blob = new Blob([toArrayBuffer(payload.fileBytes || payload.blob || new ArrayBuffer(0))], { type: payload.mimeType || 'application/octet-stream' })
+            let decodedBytes = new ArrayBuffer(0)
+            if (payload.fileBytes) {
+              if (typeof payload.fileBytes === 'string') {
+                // Base64-encoded file bytes from current format
+                decodedBytes = base64ToArrayBuffer(payload.fileBytes)
+              } else if (payload.fileBytes instanceof ArrayBuffer || ArrayBuffer.isView(payload.fileBytes)) {
+                // Direct ArrayBuffer/Uint8Array (shouldn't happen from JSON, but handle it)
+                decodedBytes = toArrayBuffer(payload.fileBytes)
+              }
+            } else {
+              // Legacy record with missing fileBytes - lost during old JSON serialization
+              console.warn(`File record ${entry.id} has no file bytes (legacy or corrupted). File will be empty.`)
+            }
+            item.blob = new Blob([decodedBytes], { type: payload.mimeType || 'application/octet-stream' })
           }
           decrypted.push(item)
         }
@@ -290,13 +327,13 @@ export async function saveVaultItem(type, payload, key) {
       mimeType: payload.type,
       size: payload.size,
       description: payload.description,
-      fileBytes,
+      fileBytes: fileBytes ? arrayBufferToBase64(fileBytes) : null,
       createdAt: data.createdAt,
       updatedAt: data.updatedAt
     }
     const encrypted = await encryptJson(itemPayload, key)
     await store.put({ id: recordId, cryptoVersion: CRYPTO_VERSION, iv: encrypted.iv, ciphertext: encrypted.ciphertext })
-    return { ...itemPayload, id: recordId, blob: payload.blob ? payload.blob : new Blob([toArrayBuffer(fileBytes)], { type: payload.type || 'application/octet-stream' }) }
+    return { ...itemPayload, id: recordId, fileBytes: fileBytes || null, blob: payload.blob ? payload.blob : new Blob([toArrayBuffer(fileBytes)], { type: payload.type || 'application/octet-stream' }) }
   }
 
   const itemPayload = {
@@ -332,13 +369,13 @@ export async function updateVaultItem(type, payload, key) {
       mimeType: payload.type,
       size: payload.size,
       description: payload.description,
-      fileBytes,
+      fileBytes: fileBytes ? arrayBufferToBase64(fileBytes) : null,
       createdAt: data.createdAt,
       updatedAt: data.updatedAt
     }
     const encrypted = await encryptJson(itemPayload, key)
     await store.put({ id: data.id, cryptoVersion: CRYPTO_VERSION, iv: encrypted.iv, ciphertext: encrypted.ciphertext })
-    return { ...itemPayload, id: data.id, blob: payload.blob ? payload.blob : new Blob([toArrayBuffer(fileBytes)], { type: payload.type || 'application/octet-stream' }) }
+    return { ...itemPayload, id: data.id, fileBytes: fileBytes || null, blob: payload.blob ? payload.blob : new Blob([toArrayBuffer(fileBytes)], { type: payload.type || 'application/octet-stream' }) }
   }
 
   const itemPayload = {
