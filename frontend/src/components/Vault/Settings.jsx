@@ -1,5 +1,6 @@
 import { useEffect, useState } from 'react'
 import packageJson from '../../../package.json'
+import { getAutoLockPreference, updateAutoLockPreference } from '../../vault/vaultService.js'
 
 function formatBytes(bytes) {
   if (!Number.isFinite(bytes) || bytes <= 0) return '—'
@@ -16,6 +17,7 @@ function formatBytes(bytes) {
 export function Settings() {
   const [storageEstimate, setStorageEstimate] = useState(null)
   const [storageError, setStorageError] = useState(null)
+  const [autoLockMinutes, setAutoLockMinutes] = useState(15)
 
   useEffect(() => {
     if (!navigator.storage?.estimate) {
@@ -31,6 +33,16 @@ export function Settings() {
     }).catch(() => {
       setStorageError('Storage usage is unavailable in this browser.')
     })
+  }, [])
+
+  useEffect(() => {
+    let active = true
+    getAutoLockPreference().then((minutes) => {
+      if (active) setAutoLockMinutes(minutes)
+    })
+    return () => {
+      active = false
+    }
   }, [])
 
   const appVersion = packageJson?.version ? packageJson.version : null
@@ -68,11 +80,23 @@ export function Settings() {
           <div className="flex flex-col gap-2 rounded-md border border-outline-variant bg-surface-container-low p-3 sm:flex-row sm:items-center sm:justify-between">
             <div>
               <p className="text-label-md text-on-surface">Auto-lock</p>
-              <p className="text-body-sm text-on-surface-variant">Available after vault encryption is enabled.</p>
+              <p className="text-body-sm text-on-surface-variant">Locks the vault after the selected period of inactivity.</p>
             </div>
-            <div className="rounded-md border border-outline-variant bg-surface-container-lowest px-3 py-2 text-label-md text-on-surface-variant">
-              Never
-            </div>
+            <select
+              className="rounded-md border border-outline-variant bg-surface-container-lowest px-3 py-2 text-label-md text-on-surface"
+              value={autoLockMinutes}
+              onChange={async (event) => {
+                const value = Number(event.target.value)
+                setAutoLockMinutes(value)
+                await updateAutoLockPreference(value)
+              }}
+            >
+              <option value={5}>5 minutes</option>
+              <option value={15}>15 minutes</option>
+              <option value={30}>30 minutes</option>
+              <option value={60}>1 hour</option>
+              <option value={0}>Never</option>
+            </select>
           </div>
         </div>
       </section>
@@ -109,10 +133,10 @@ export function Settings() {
             <div className="flex items-center justify-between gap-3">
               <div>
                 <p className="text-label-md text-on-surface">Vault Encryption</p>
-                <p className="text-body-sm text-on-surface-variant">Client-side encryption will be enabled in the next security stage.</p>
+                <p className="text-body-sm text-on-surface-variant">Client-side AES-GCM encryption is enabled for stored records.</p>
               </div>
               <span className="rounded-full border border-outline-variant bg-surface-container-lowest px-3 py-1 text-label-md text-on-surface-variant">
-                Not enabled yet
+                Enabled
               </span>
             </div>
           </div>
@@ -121,10 +145,10 @@ export function Settings() {
             <div className="flex items-center justify-between gap-3">
               <div>
                 <p className="text-label-md text-on-surface">Master Password</p>
-                <p className="text-body-sm text-on-surface-variant">Master password protection is not configured in Stage 1.</p>
+                <p className="text-body-sm text-on-surface-variant">The master password is used to derive the vault key locally in the browser.</p>
               </div>
               <span className="rounded-full border border-outline-variant bg-surface-container-lowest px-3 py-1 text-label-md text-on-surface-variant">
-                Not configured
+                Configured
               </span>
             </div>
           </div>

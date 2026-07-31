@@ -10,6 +10,7 @@ import { NoteDetail } from '../components/Vault/NoteDetail.jsx'
 import { FileForm } from '../components/Vault/FileForm.jsx'
 import { FileDetail } from '../components/Vault/FileDetail.jsx'
 import { Settings } from '../components/Vault/Settings.jsx'
+import { deleteVaultItem, getActiveVaultSession, loadVaultItems, saveVaultItem, updateVaultItem } from '../vault/vaultService.js'
 
 /** Returns the Material Symbol icon name for each item type */
 function itemIcon(type) {
@@ -71,17 +72,24 @@ export function VaultPage({ onLock }) {
   const [isAddMenuOpen, setIsAddMenuOpen] = useState(false)
   const addMenuRef = useRef(null)
 
-  // Fetch all collections from Dexie.
-  const rawPasswords = useLiveQuery(() => db.passwords.toArray()) || []
-  const rawNotes = useLiveQuery(() => db.notes.toArray()) || []
-  const rawFiles = useLiveQuery(() => db.files.toArray()) || []
+  const [allItems, setAllItems] = useState([])
+  const session = getActiveVaultSession()
 
-  // Combine and inject types (if missing)
-  const allItems = [
-    ...rawPasswords.map(p => ({ ...p, type: 'password' })),
-    ...rawNotes.map(n => ({ ...n, type: 'note' })),
-    ...rawFiles.map(f => ({ ...f, type: 'file' }))
-  ]
+  useEffect(() => {
+    let active = true
+    const loadItems = async () => {
+      if (!session?.key) {
+        setAllItems([])
+        return
+      }
+      const items = await loadVaultItems(session.key)
+      if (active) setAllItems(items)
+    }
+    void loadItems()
+    return () => {
+      active = false
+    }
+  }, [session?.key, session?.meta?.id])
 
   // Derived state
   const selectedItem = selectedItemId ? allItems.find(i => i.id === selectedItemId) : null
@@ -171,8 +179,7 @@ export function VaultPage({ onLock }) {
     setStorageError(null)
     try {
       const now = Date.now()
-      
-      // Determine what type we are operating on
+
       let opType = specificType
       if (!opType) {
         if (currentView.includes('password')) opType = 'password'
@@ -181,6 +188,10 @@ export function VaultPage({ onLock }) {
       }
 
       const isCreating = Boolean(specificType) || currentView.startsWith('add')
+      const key = getActiveVaultSession()?.key
+      if (!key) {
+        throw new Error('Vault is locked')
+      }
 
       if (isCreating) {
         const payload = {
@@ -189,26 +200,35 @@ export function VaultPage({ onLock }) {
           createdAt: now,
           updatedAt: now
         }
-        
-        if (opType === 'password') await db.passwords.add(payload)
-        else if (opType === 'note') await db.notes.add(payload)
-        else if (opType === 'file') await db.files.add(payload)
+
+        const saved = opType === 'file'
+          ? await saveVaultItem('file', { ...payload, blob: formData.blob }, key)
+          : opType === 'note'
+            ? await saveVaultItem('note', payload, key)
+            : await saveVaultItem('password', payload, key)
+
+        setAllItems((prev) => [saved, ...prev])
       } else if (currentView.startsWith('edit') && selectedItem) {
         const payload = {
           ...formData,
+          id: selectedItem.id,
+          createdAt: selectedItem.createdAt ?? now,
           updatedAt: now
         }
 
-        if (selectedItem.type === 'password') await db.passwords.update(selectedItem.id, payload)
-        else if (selectedItem.type === 'note') await db.notes.update(selectedItem.id, payload)
-        else if (selectedItem.type === 'file') await db.files.update(selectedItem.id, payload)
+        const saved = selectedItem.type === 'file'
+          ? await updateVaultItem('file', { ...payload, blob: formData.blob }, key)
+          : selectedItem.type === 'note'
+            ? await updateVaultItem('note', payload, key)
+            : await updateVaultItem('password', payload, key)
+
+        setAllItems((prev) => prev.map((item) => item.id === saved.id ? { ...item, ...saved } : item))
       }
-      
+
       if (opType === 'file') {
         setIsUploadModalOpen(false)
       }
 
-      // Return to list or detail view
       if (isCreating) {
         setCurrentView('list')
       } else {
@@ -216,7 +236,6 @@ export function VaultPage({ onLock }) {
       }
     } catch (error) {
       console.error('Failed to save item:', error)
-      // Check for QuotaExceededError or general storage failure
       if (error.name === 'QuotaExceededError' || error.message.includes('Quota')) {
         setStorageError('Storage quota exceeded. Your browser does not have enough space to save this file locally.')
       } else {
@@ -228,10 +247,11 @@ export function VaultPage({ onLock }) {
   const handleDelete = async (id, type) => {
     setStorageError(null)
     try {
-      if (type === 'password') await db.passwords.delete(id)
-      else if (type === 'note') await db.notes.delete(id)
-      else if (type === 'file') await db.files.delete(id)
-      
+      if (type === 'password') await deleteVaultItem('password', id)
+      else if (type === 'note') await deleteVaultItem('note', id)
+      else if (type === 'file') await deleteVaultItem('file', id)
+
+      setAllItems((prev) => prev.filter((item) => item.id !== id))
       setSelectedItemId(null)
       setCurrentView('list')
     } catch (error) {

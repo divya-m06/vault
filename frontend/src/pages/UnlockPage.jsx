@@ -16,13 +16,19 @@ import { Input } from '../components/ui/Input.jsx'
  *
  * Stage 0: submitting the form calls onUnlock() with no real validation.
  */
-export function UnlockPage({ onUnlock }) {
+export function UnlockPage({ onUnlock, error }) {
   const [password, setPassword] = useState('')
+  const [isSubmitting, setIsSubmitting] = useState(false)
 
-  const handleSubmit = (e) => {
+  const handleSubmit = async (e) => {
     e.preventDefault()
-    // Stage 0: no auth logic — just navigate to the vault shell
-    onUnlock()
+    if (!password.trim()) return
+    setIsSubmitting(true)
+    try {
+      await onUnlock(password)
+    } finally {
+      setIsSubmitting(false)
+    }
   }
 
   return (
@@ -129,14 +135,21 @@ export function UnlockPage({ onUnlock }) {
               required
             />
 
+            {error && (
+              <div className="rounded-lg border border-error/20 bg-error-container px-4 py-3 text-on-error-container text-body-sm">
+                {error}
+              </div>
+            )}
+
             <Button
               id="unlock-submit-btn"
               type="submit"
               variant="primary"
               className="w-full py-3 text-body-md"
+              disabled={isSubmitting}
             >
               <span className="material-symbols-outlined text-[18px]" aria-hidden="true">lock_open</span>
-              Unlock Vault
+              {isSubmitting ? 'Unlocking…' : 'Unlock Vault'}
             </Button>
           </form>
 

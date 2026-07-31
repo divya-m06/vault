@@ -155,10 +155,8 @@ export function Sidebar({ activeItem, onNavSelect, onLock, mobileOpen = false, o
             key={item.id}
             id={`nav-${item.id}`}
             onClick={() => handleSelect(item.id)}
-            disabled={item.id === 'lock'}
-            className={`nav-item w-full text-left ${activeItem === item.id ? 'nav-item-active' : ''} ${item.id === 'lock' ? 'opacity-70 cursor-not-allowed' : ''}`}
+            className={`nav-item w-full text-left ${activeItem === item.id ? 'nav-item-active' : ''}`}
             aria-current={activeItem === item.id ? 'page' : undefined}
-            aria-disabled={item.id === 'lock' ? 'true' : undefined}
           >
             <span className="material-symbols-outlined text-[20px]" aria-hidden="true">
               {item.icon}
