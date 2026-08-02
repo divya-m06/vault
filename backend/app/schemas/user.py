@@ -29,9 +29,19 @@ class UserCreate(BaseModel):
         return value
 
 
+class UserLogin(BaseModel):
+    email: str = Field(..., min_length=1)
+    password: str = Field(..., min_length=1)
+
+
 class UserResponse(BaseModel):
     model_config = ConfigDict(from_attributes=True)
 
     id: UUID
     email: str
     created_at: datetime
+
+
+class TokenResponse(BaseModel):
+    access_token: str
+    token_type: str = "Bearer"
