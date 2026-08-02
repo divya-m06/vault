@@ -190,19 +190,24 @@ export async function unlockVault(password) {
 
 export async function initializeOrUnlockVault(password, options = {}) {
   const meta = await db.vaultMeta.get(VAULT_META_ID)
-  if (!meta) {
-    const created = await createVault(password, options)
-    const session = {
-      key: created.key,
-      meta: created.meta,
-      autoLockMinutes: created.meta.autoLockMinutes ?? DEFAULT_AUTO_LOCK_MINUTES
+  try {
+    if (!meta) {
+      const created = await createVault(password, options)
+      const session = {
+        key: created.key,
+        meta: created.meta,
+        autoLockMinutes: created.meta.autoLockMinutes ?? DEFAULT_AUTO_LOCK_MINUTES
+      }
+      setActiveVaultSession(session)
+      await ensureMigration(created.key)
+      return { ok: true, created: true, session }
     }
-    setActiveVaultSession(session)
-    await ensureMigration(created.key)
-    return { ok: true, created: true, session }
-  }
 
-  return unlockVault(password)
+    return unlockVault(password)
+  } catch (error) {
+    console.error('Original vault error:', error)
+    throw error
+  }
 }
 
 export async function lockVault() {

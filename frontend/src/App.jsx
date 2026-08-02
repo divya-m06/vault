@@ -1,27 +1,26 @@
 import { useEffect, useRef, useState } from 'react'
+import { useLocation, useNavigate } from 'react-router-dom'
 import { UnlockPage } from './pages/UnlockPage.jsx'
 import { VaultPage } from './pages/VaultPage.jsx'
-import { clearActiveVaultSession, getActiveVaultSession, initializeOrUnlockVault, lockVault } from './vault/vaultService.js'
+import { getActiveVaultSession, initializeOrUnlockVault, lockVault } from './vault/vaultService.js'
 
 /**
- * App — root component.
+ * App — route-aware shell for the original unlock/lock flow.
  *
- * Manages the single piece of top-level state: whether the vault is
- * "unlocked" (showing the main vault view) or "locked" (showing the
- * unlock/login screen).
- *
- * Stage 0: no real auth. Clicking "Unlock Vault" switches views,
- * "Lock Vault" switches back. Real crypto comes in a later stage.
+ * The existing lock callback now flows through the router so the vault
+ * page can call the original lockVault() logic and return to UnlockPage.
  */
 export default function App() {
-  const [view, setView] = useState('locked')
   const [unlockError, setUnlockError] = useState('')
   const autoLockTimerRef = useRef(null)
+  const location = useLocation()
+  const navigate = useNavigate()
+  const isVaultView = location.pathname === '/vault'
 
   const handleLock = async () => {
     await lockVault()
     clearTimeout(autoLockTimerRef.current)
-    setView('locked')
+    navigate('/unlock')
   }
 
   const handleUnlock = async (password) => {
@@ -32,7 +31,7 @@ export default function App() {
         setUnlockError('Incorrect master password. Please try again.')
         return
       }
-      setView('unlocked')
+      navigate('/vault')
     } catch (error) {
       console.error('Unlock failed:', error)
       setUnlockError('Unable to unlock the vault right now.')
@@ -40,7 +39,7 @@ export default function App() {
   }
 
   useEffect(() => {
-    if (view !== 'unlocked') {
+    if (!isVaultView) {
       clearTimeout(autoLockTimerRef.current)
       return
     }
@@ -62,14 +61,14 @@ export default function App() {
       clearTimeout(autoLockTimerRef.current)
       events.forEach((eventName) => window.removeEventListener(eventName, resetTimer))
     }
-  }, [view])
+  }, [isVaultView])
 
   return (
     <div className="h-full">
-      {view === 'locked' ? (
-        <UnlockPage onUnlock={handleUnlock} error={unlockError} />
-      ) : (
+      {isVaultView ? (
         <VaultPage onLock={handleLock} />
+      ) : (
+        <UnlockPage onUnlock={handleUnlock} error={unlockError} />
       )}
     </div>
   )

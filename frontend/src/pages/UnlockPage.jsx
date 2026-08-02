@@ -1,35 +1,113 @@
 import { useState } from 'react'
+import { useNavigate } from 'react-router-dom'
+import { loginUser, registerUser } from '../api/auth.js'
 import { Button } from '../components/ui/Button.jsx'
 import { Input } from '../components/ui/Input.jsx'
+import { useAuth } from '../contexts/AuthContext.jsx'
+import { initializeOrUnlockVault } from '../vault/vaultService.js'
 
 /**
- * Unlock / Login page — the entry point of Vault.
+ * Unlock / auth page — the entry point of Vault.
  *
  * Props:
- *   onUnlock — Called when the form is submitted
- *
- * Layout:
- * - Desktop (lg+): two-column split
- *     Left  → brand + tagline + abstract background + trust badges
- *     Right → master-password form
- * - Mobile: single column (right pane only), brand logo at top
- *
- * Stage 0: submitting the form calls onUnlock() with no real validation.
+ *   onUnlock — optional legacy callback for the existing App shell
+ *   error — optional legacy error message to display
  */
-export function UnlockPage({ onUnlock, error }) {
+export function UnlockPage({ onUnlock, error: externalError }) {
+  const [mode, setMode] = useState('unlock')
+  const [email, setEmail] = useState('')
   const [password, setPassword] = useState('')
+  const [confirmPassword, setConfirmPassword] = useState('')
   const [isSubmitting, setIsSubmitting] = useState(false)
+  const [formError, setFormError] = useState('')
+  const [formSuccess, setFormSuccess] = useState('')
+  const navigate = useNavigate()
+  const { login: storeAuthToken } = useAuth()
 
-  const handleSubmit = async (e) => {
+  const resetFeedback = () => {
+    setFormError('')
+    setFormSuccess('')
+  }
+
+  const handleUnlockSubmit = async (e) => {
     e.preventDefault()
-    if (!password.trim()) return
+
+    if (typeof onUnlock === 'function') {
+      if (!password.trim()) return
+      setIsSubmitting(true)
+      try {
+        await onUnlock(password)
+      } finally {
+        setIsSubmitting(false)
+      }
+      return
+    }
+
+    if (!email.trim() || !password.trim()) {
+      setFormError('Please enter your email and Master Password.')
+      return
+    }
+
+    resetFeedback()
     setIsSubmitting(true)
+
     try {
-      await onUnlock(password)
+      const data = await loginUser(email.trim(), password)
+      storeAuthToken(data.access_token)
+
+      const vaultResult = await initializeOrUnlockVault(password)
+      if (!vaultResult?.ok) {
+        throw new Error('Unable to initialize your vault securely.')
+      }
+
+      setPassword('')
+      setConfirmPassword('')
+      navigate('/vault')
+    } catch (error) {
+      setFormError(error.message || 'Unable to unlock your vault right now.')
     } finally {
       setIsSubmitting(false)
     }
   }
+
+  const handleCreateSubmit = async (e) => {
+    e.preventDefault()
+
+    if (!email.trim() || !password.trim() || !confirmPassword.trim()) {
+      setFormError('Please complete all fields to create your vault.')
+      return
+    }
+
+    if (password !== confirmPassword) {
+      setFormError('Your Master Passwords do not match.')
+      return
+    }
+
+    resetFeedback()
+    setIsSubmitting(true)
+
+    try {
+      await registerUser(email.trim(), password)
+      setMode('unlock')
+      setEmail('')
+      setPassword('')
+      setConfirmPassword('')
+      setFormSuccess('Vault created. Please unlock it with your email and Master Password.')
+    } catch (error) {
+      setFormError(error.message || 'Unable to create your vault right now.')
+    } finally {
+      setIsSubmitting(false)
+    }
+  }
+
+  const handleModeSwitch = () => {
+    resetFeedback()
+    setMode((current) => (current === 'unlock' ? 'create' : 'unlock'))
+    setPassword('')
+    setConfirmPassword('')
+  }
+
+  const displayError = formError || externalError || ''
 
   return (
     <div className="flex w-full h-full">
@@ -91,7 +169,7 @@ export function UnlockPage({ onUnlock, error }) {
         </div>
       </div>
 
-      {/* ── Right pane: login form ─────────────────────────────────────── */}
+      {/* ── Right pane: vault form ───────────────────────────────────── */}
       <div className="w-full lg:w-1/2 bg-surface-container-lowest flex items-center justify-center p-8 lg:px-10 relative">
         {/* Mobile brand header — only visible below lg */}
         <div className="absolute top-8 left-8 lg:hidden flex items-center gap-3">
@@ -115,53 +193,94 @@ export function UnlockPage({ onUnlock, error }) {
             >
               <span className="material-symbols-outlined text-primary text-[24px]">lock_person</span>
             </div>
-            <h1 className="text-headline-lg text-on-surface mb-2">Unlock your vault</h1>
+            <h1 className="text-headline-lg text-on-surface mb-2">
+              {mode === 'unlock' ? 'Unlock your Vault' : 'Create your Vault'}
+            </h1>
             <p className="text-body-md text-on-surface-variant">
-              Enter your Master Password to proceed.
+              {mode === 'unlock'
+                ? 'Access your encrypted vault using your email and Master Password.'
+                : 'Create your secure encrypted vault using a Master Password.'}
             </p>
           </div>
 
           {/* Form */}
-          <form onSubmit={handleSubmit} className="space-y-5" noValidate>
+          <form
+            onSubmit={mode === 'unlock' ? handleUnlockSubmit : handleCreateSubmit}
+            className="space-y-5"
+            noValidate
+          >
             <Input
-              id="master-password"
-              label="Master Password"
-              placeholder="Enter your master password"
-              showToggle
-              value={password}
-              onChange={(e) => setPassword(e.target.value)}
-              autoComplete="current-password"
+              id="vault-email"
+              label="Email"
+              placeholder="Enter your email"
+              type="email"
+              value={email}
+              onChange={(e) => setEmail(e.target.value)}
+              autoComplete="email"
               autoFocus
               required
             />
 
-            {error && (
+            <Input
+              id="vault-master-password"
+              label="Master Password"
+              placeholder={mode === 'unlock' ? 'Enter your master password' : 'Choose a master password'}
+              showToggle
+              value={password}
+              onChange={(e) => setPassword(e.target.value)}
+              autoComplete={mode === 'unlock' ? 'current-password' : 'new-password'}
+              required
+            />
+
+            {mode === 'create' && (
+              <Input
+                id="vault-confirm-password"
+                label="Confirm Master Password"
+                placeholder="Confirm your master password"
+                showToggle
+                value={confirmPassword}
+                onChange={(e) => setConfirmPassword(e.target.value)}
+                autoComplete="new-password"
+                required
+              />
+            )}
+
+            {displayError && (
               <div className="rounded-lg border border-error/20 bg-error-container px-4 py-3 text-on-error-container text-body-sm">
-                {error}
+                {displayError}
+              </div>
+            )}
+
+            {formSuccess && (
+              <div className="rounded-lg border border-success/20 bg-success-container px-4 py-3 text-on-success-container text-body-sm">
+                {formSuccess}
               </div>
             )}
 
             <Button
-              id="unlock-submit-btn"
+              id={mode === 'unlock' ? 'unlock-submit-btn' : 'create-submit-btn'}
               type="submit"
               variant="primary"
               className="w-full py-3 text-body-md"
               disabled={isSubmitting}
             >
-              <span className="material-symbols-outlined text-[18px]" aria-hidden="true">lock_open</span>
-              {isSubmitting ? 'Unlocking…' : 'Unlock Vault'}
+              <span className="material-symbols-outlined text-[18px]" aria-hidden="true">
+                {mode === 'unlock' ? 'lock_open' : 'add_circle'}
+              </span>
+              {isSubmitting ? (mode === 'unlock' ? 'Unlocking…' : 'Creating…') : mode === 'unlock' ? 'Unlock Vault' : 'Create Vault'}
             </Button>
           </form>
 
-          {/* Help link */}
+          {/* Mode switch */}
           <div className="mt-7 text-center">
-            <a
-              href="#"
+            <button
+              type="button"
               className="text-label-md text-primary hover:underline underline-offset-4 transition-colors"
-              onClick={(e) => e.preventDefault()}
+              onClick={handleModeSwitch}
             >
-              Need help accessing your vault?
-            </a>
+              {mode === 'unlock' ? 'New to Vault?' : 'Already have a Vault?'}{' '}
+              <span className="font-medium">{mode === 'unlock' ? 'Create your Vault' : 'Unlock it'}</span>
+            </button>
           </div>
         </div>
       </div>
