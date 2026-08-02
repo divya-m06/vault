@@ -27,3 +27,4 @@ Thumbs.db
 # Stitch design reference
 stitch-design/
 *.zip
+backend/.env
