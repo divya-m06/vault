@@ -64,13 +64,13 @@ This project is an in-progress application and has not been presented as indepen
 ## Tech Stack
 
 | Area | Technologies |
-| --- | --- |
-| Frontend | React 19, Vite, React Router, Tailwind CSS |
-| Local data | IndexedDB, Dexie, Dexie React Hooks |
-| Client cryptography | Web Crypto API, PBKDF2-HMAC-SHA-256, AES-256-GCM |
-| Backend | Python, FastAPI, SQLAlchemy, Pydantic |
-| Authentication | Passlib/bcrypt, python-jose JWT (HS256) |
-| Database | PostgreSQL via psycopg2 |
+|------|--------------|
+| Frontend | React, Vite, Tailwind CSS, React Router |
+| Backend | Python, FastAPI, SQLAlchemy |
+| Database | PostgreSQL |
+| Authentication | JWT, bcrypt |
+| Encryption | Web Crypto API, PBKDF2, AES-GCM |
+| Local Storage | IndexedDB, Dexie |
 
 ## Project Structure
 
