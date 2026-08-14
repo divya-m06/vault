@@ -1,4 +1,17 @@
-import { db } from '../db/db.js'
+import { getVaultDB, clearAllVaultDBs } from '../db/db.js'
+
+export async function deriveEmailHash(email) {
+  const encoder = new TextEncoder()
+  const normalizedEmail = email.trim().toLowerCase()
+  const hashBuffer = await crypto.subtle.digest('SHA-256', encoder.encode(normalizedEmail))
+  return toHex(hashBuffer)
+}
+
+function getDb() {
+  const session = getActiveVaultSession()
+  if (!session || !session.db) throw new Error("Vault is locked or uninitialized")
+  return session.db
+}
 
 const VAULT_META_ID = 'vault'
 const DEFAULT_AUTO_LOCK_MINUTES = 15
@@ -65,6 +78,7 @@ export function setActiveVaultSession(session) {
 
 export function clearActiveVaultSession() {
   activeSession = null
+  clearAllVaultDBs()
 }
 
 export async function deriveKeyFromPassword(password, salt) {
@@ -82,6 +96,33 @@ export async function deriveKeyFromPassword(password, salt) {
     false,
     ['encrypt', 'decrypt']
   )
+}
+
+export async function deriveAuthValue(password, email) {
+  const encoder = new TextEncoder()
+  const saltString = email.trim().toLowerCase() + "vault-auth-v1"
+  const saltHashBuffer = await crypto.subtle.digest('SHA-256', encoder.encode(saltString))
+  
+  const passwordKey = await crypto.subtle.importKey(
+    'raw',
+    encoder.encode(password),
+    'PBKDF2',
+    false,
+    ['deriveBits']
+  )
+  
+  const derivedBits = await crypto.subtle.deriveBits(
+    {
+      name: 'PBKDF2',
+      hash: 'SHA-256',
+      salt: saltHashBuffer,
+      iterations: KDF_ITERATIONS
+    },
+    passwordKey,
+    256
+  )
+  
+  return arrayBufferToBase64(derivedBits)
 }
 
 export function createRandomSalt() {
@@ -135,7 +176,7 @@ export async function decryptJson(envelope, key) {
   return JSON.parse(new TextDecoder().decode(bytes))
 }
 
-export async function createVault(password, options = {}) {
+export async function createVault(password, db, options = {}) {
   const autoLockMinutes = options.autoLockMinutes ?? DEFAULT_AUTO_LOCK_MINUTES
   const salt = createRandomSalt()
   const key = await deriveKeyFromPassword(password, salt)
@@ -165,7 +206,7 @@ export async function createVault(password, options = {}) {
   return { key, meta }
 }
 
-export async function unlockVault(password) {
+export async function unlockVault(password, db) {
   const meta = await db.vaultMeta.get(VAULT_META_ID)
   if (!meta) {
     return { ok: false, reason: 'missing-vault' }
@@ -188,22 +229,34 @@ export async function unlockVault(password) {
   return { ok: true, session }
 }
 
-export async function initializeOrUnlockVault(password, options = {}) {
-  const meta = await db.vaultMeta.get(VAULT_META_ID)
+export async function initializeOrUnlockVault(password, email, options = {}) {
+  if (!email) throw new Error("Email is required to initialize or unlock the vault")
+  
+  const emailHash = await deriveEmailHash(email)
+  const db = getVaultDB(emailHash)
+
   try {
+    const meta = await db.vaultMeta.get(VAULT_META_ID)
     if (!meta) {
-      const created = await createVault(password, options)
+      const created = await createVault(password, db, options)
       const session = {
         key: created.key,
         meta: created.meta,
+        db,
         autoLockMinutes: created.meta.autoLockMinutes ?? DEFAULT_AUTO_LOCK_MINUTES
       }
       setActiveVaultSession(session)
-      await ensureMigration(created.key)
+      await ensureMigration(created.key, db)
       return { ok: true, created: true, session }
     }
 
-    return unlockVault(password)
+    const unlocked = await unlockVault(password, db)
+    if (!unlocked.ok) return unlocked
+    
+    unlocked.session.db = db
+    setActiveVaultSession(unlocked.session)
+    await ensureMigration(unlocked.session.key, db)
+    return unlocked
   } catch (error) {
     console.error('Original vault error:', error)
     throw error
@@ -215,10 +268,10 @@ export async function lockVault() {
 }
 
 export async function updateAutoLockPreference(minutes) {
-  const meta = await db.vaultMeta.get(VAULT_META_ID)
+  const meta = await getDb().vaultMeta.get(VAULT_META_ID)
   if (!meta) return null
   const nextMeta = { ...meta, autoLockMinutes: minutes }
-  await db.vaultMeta.put(nextMeta)
+  await getDb().vaultMeta.put(nextMeta)
   if (activeSession) {
     activeSession.autoLockMinutes = minutes
   }
@@ -226,28 +279,28 @@ export async function updateAutoLockPreference(minutes) {
 }
 
 export async function getAutoLockPreference() {
-  const meta = await db.vaultMeta.get(VAULT_META_ID)
+  const meta = await getDb().vaultMeta.get(VAULT_META_ID)
   return meta?.autoLockMinutes ?? DEFAULT_AUTO_LOCK_MINUTES
 }
 
 export function getVaultMeta() {
-  return db.vaultMeta.get(VAULT_META_ID)
+  return getDb().vaultMeta.get(VAULT_META_ID)
 }
 
-async function getEncryptedStore(type) {
+async function getEncryptedStore(type, db = getDb()) {
   switch (type) {
-    case 'password': return db.encryptedPasswords
-    case 'note': return db.encryptedNotes
-    case 'file': return db.encryptedFiles
+    case 'password': return getDb().encryptedPasswords
+    case 'note': return getDb().encryptedNotes
+    case 'file': return getDb().encryptedFiles
     default: throw new Error(`Unsupported type: ${type}`)
   }
 }
 
-function getLegacyStore(type) {
+function getLegacyStore(type, db = getDb()) {
   switch (type) {
-    case 'password': return db.passwords
-    case 'note': return db.notes
-    case 'file': return db.files
+    case 'password': return getDb().passwords
+    case 'note': return getDb().notes
+    case 'file': return getDb().files
     default: throw new Error(`Unsupported type: ${type}`)
   }
 }
@@ -264,9 +317,9 @@ export async function loadVaultItems(key) {
   if (!key) return []
 
   const [passwords, notes, files] = await Promise.all([
-    db.encryptedPasswords.toArray(),
-    db.encryptedNotes.toArray(),
-    db.encryptedFiles.toArray()
+    getDb().encryptedPasswords.toArray(),
+    getDb().encryptedNotes.toArray(),
+    getDb().encryptedFiles.toArray()
   ])
 
   const decryptEntries = async (entries, type) => {
@@ -483,7 +536,7 @@ export async function ensureMigration(key) {
 }
 
 export async function getVaultSnapshot() {
-  const meta = await db.vaultMeta.get(VAULT_META_ID)
+  const meta = await getDb().vaultMeta.get(VAULT_META_ID)
   return {
     meta,
     session: activeSession,

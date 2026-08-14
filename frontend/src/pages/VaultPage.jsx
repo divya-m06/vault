@@ -1,6 +1,4 @@
 import { useEffect, useRef, useState } from 'react'
-import { useLiveQuery } from 'dexie-react-hooks'
-import { db } from '../db/db.js'
 import { Sidebar } from '../components/layout/Sidebar.jsx'
 import { TopBar } from '../components/layout/TopBar.jsx'
 import { PasswordForm } from '../components/Vault/PasswordForm.jsx'

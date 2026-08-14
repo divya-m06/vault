@@ -3,6 +3,7 @@ import { useNavigate } from 'react-router-dom'
 import { registerUser } from '../api/auth.js'
 import { Button } from '../components/ui/Button.jsx'
 import { Input } from '../components/ui/Input.jsx'
+import { deriveAuthValue } from '../vault/vaultService.js'
 
 const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/
 
@@ -90,7 +91,10 @@ export function RegisterPage() {
     setIsSubmitting(true)
 
     try {
-      await registerUser(email, password)
+      const emailTrimmed = email.trim()
+      const authValue = await deriveAuthValue(password, emailTrimmed)
+      await registerUser(emailTrimmed, authValue)
+      
       setSuccess('Registration successful. You can now sign in.')
       setEmail('')
       setPassword('')

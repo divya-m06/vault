@@ -1,119 +1,68 @@
 import { useState } from 'react'
 import { useNavigate } from 'react-router-dom'
-import { loginUser, registerUser } from '../api/auth.js'
 import { Button } from '../components/ui/Button.jsx'
 import { Input } from '../components/ui/Input.jsx'
 import { useAuth } from '../contexts/AuthContext.jsx'
 import { initializeOrUnlockVault } from '../vault/vaultService.js'
 
 /**
- * Unlock / auth page — the entry point of Vault.
+ * UnlockPage — Step 2 of the two-step auth flow.
  *
- * Props:
- *   onUnlock — optional legacy callback for the existing App shell
- *   error — optional legacy error message to display
+ * The user reaches this page only after a valid JWT has been obtained in
+ * Step 1 (LoginPage). They now enter their Master Password, which is used
+ * purely client-side to derive the AES-256-GCM key via PBKDF2.
+ *
+ * ZERO-KNOWLEDGE GUARANTEE: The master password typed here is NEVER sent
+ * to any network endpoint. It is consumed entirely within vaultService.js
+ * (Web Crypto API) and then discarded. The backend never sees it.
+ *
+ * After successful vault unlock, we navigate to /vault.
  */
-export function UnlockPage({ onUnlock, error: externalError }) {
-  const [mode, setMode] = useState('unlock')
-  const [email, setEmail] = useState('')
-  const [password, setPassword] = useState('')
-  const [confirmPassword, setConfirmPassword] = useState('')
-  const [isSubmitting, setIsSubmitting] = useState(false)
-  const [formError, setFormError] = useState('')
-  const [formSuccess, setFormSuccess] = useState('')
+export function UnlockPage() {
   const navigate = useNavigate()
-  const { login: storeAuthToken } = useAuth()
+  const { logout, accessToken } = useAuth()
 
-  const resetFeedback = () => {
-    setFormError('')
-    setFormSuccess('')
-  }
-
-  const handleUnlockSubmit = async (e) => {
-    e.preventDefault()
-
-    if (typeof onUnlock === 'function') {
-      if (!password.trim()) return
-      setIsSubmitting(true)
-      try {
-        await onUnlock(password)
-      } finally {
-        setIsSubmitting(false)
-      }
-      return
-    }
-
-    if (!email.trim() || !password.trim()) {
-      setFormError('Please enter your email and Master Password.')
-      return
-    }
-
-    resetFeedback()
-    setIsSubmitting(true)
-
+  // Optionally show the account email for context, parsed from the JWT payload
+  const accountEmail = (() => {
     try {
-      const data = await loginUser(email.trim(), password)
-      storeAuthToken(data.access_token)
+      return JSON.parse(atob(accessToken.split('.')[1]))?.email ?? null
+    } catch {
+      return null
+    }
+  })()
 
-      const vaultResult = await initializeOrUnlockVault(password)
+  const [masterPassword, setMasterPassword] = useState('')
+  const [error, setError] = useState('')
+  const [isSubmitting, setIsSubmitting] = useState(false)
+
+  const handleSubmit = async (e) => {
+    e.preventDefault()
+    if (!masterPassword.trim()) {
+      setError('Please enter your master password.')
+      return
+    }
+
+    setError('')
+    setIsSubmitting(true)
+    try {
+      const vaultResult = await initializeOrUnlockVault(masterPassword, accountEmail)
       if (!vaultResult?.ok) {
-        throw new Error('Unable to initialize your vault securely.')
+        setError('Incorrect master password. Please try again.')
+        return
       }
-
-      setPassword('')
-      setConfirmPassword('')
-      navigate('/vault')
-    } catch (error) {
-      setFormError(error.message || 'Unable to unlock your vault right now.')
+      setMasterPassword('')
+      navigate('/vault', { replace: true })
+    } catch (err) {
+      setError(err.message || 'Unable to unlock the vault right now.')
     } finally {
       setIsSubmitting(false)
     }
   }
-
-  const handleCreateSubmit = async (e) => {
-    e.preventDefault()
-
-    if (!email.trim() || !password.trim() || !confirmPassword.trim()) {
-      setFormError('Please complete all fields to create your vault.')
-      return
-    }
-
-    if (password !== confirmPassword) {
-      setFormError('Your Master Passwords do not match.')
-      return
-    }
-
-    resetFeedback()
-    setIsSubmitting(true)
-
-    try {
-      await registerUser(email.trim(), password)
-      setMode('unlock')
-      setEmail('')
-      setPassword('')
-      setConfirmPassword('')
-      setFormSuccess('Vault created. Please unlock it with your email and Master Password.')
-    } catch (error) {
-      setFormError(error.message || 'Unable to create your vault right now.')
-    } finally {
-      setIsSubmitting(false)
-    }
-  }
-
-  const handleModeSwitch = () => {
-    resetFeedback()
-    setMode((current) => (current === 'unlock' ? 'create' : 'unlock'))
-    setPassword('')
-    setConfirmPassword('')
-  }
-
-  const displayError = formError || externalError || ''
 
   return (
     <div className="flex w-full h-full">
-      {/* ── Left pane: brand + messaging (desktop only) ──────────────── */}
+      {/* ── Left brand pane (desktop only) ──────────────────────────── */}
       <div className="hidden lg:flex lg:w-1/2 bg-surface-container relative flex-col justify-between overflow-hidden">
-        {/* Decorative background */}
         <div
           aria-hidden="true"
           className="absolute inset-0 z-0 pointer-events-none"
@@ -125,33 +74,23 @@ export function UnlockPage({ onUnlock, error: externalError }) {
             `,
           }}
         />
-
         <div className="relative z-10 flex min-h-full flex-col px-16 pt-16 pb-12">
-          {/* Brand logo */}
           <div className="flex items-center gap-3.5">
-            <span
-              className="material-symbols-outlined text-primary text-[40px] icon-filled"
-              aria-hidden="true"
-            >
+            <span className="material-symbols-outlined text-primary text-[40px] icon-filled" aria-hidden="true">
               shield_lock
             </span>
             <span className="text-[26px] font-semibold tracking-tight text-primary">Vault</span>
           </div>
-
           <div className="flex flex-1 flex-col justify-center">
-            {/* Marketing copy */}
             <div className="max-w-md">
               <h2 className="text-[50px] font-semibold leading-tight text-on-surface tracking-tight mb-5">
                 Your digital life,<br />secured.
               </h2>
               <p className="text-body-lg text-on-surface-variant leading-relaxed max-w-[30rem]">
-                Precision-engineered encryption for the modern professional. Access your sensitive data,
-                secure notes, and credentials within an isolated, zero-knowledge environment.
+                Your master password never leaves this device. Only you can decrypt your vault.
               </p>
             </div>
           </div>
-
-          {/* Trust badges */}
           <div className="mt-8 flex flex-wrap gap-8 border-t border-outline-variant/40 pt-7 text-on-surface-variant">
             <div className="flex items-center gap-2">
               <span className="material-symbols-outlined text-[18px]" aria-hidden="true">verified_user</span>
@@ -169,117 +108,80 @@ export function UnlockPage({ onUnlock, error: externalError }) {
         </div>
       </div>
 
-      {/* ── Right pane: vault form ───────────────────────────────────── */}
+      {/* ── Right form pane ──────────────────────────────────────────── */}
       <div className="w-full lg:w-1/2 bg-surface-container-lowest flex items-center justify-center p-8 lg:px-10 relative">
-        {/* Mobile brand header — only visible below lg */}
+        {/* Mobile brand header */}
         <div className="absolute top-8 left-8 lg:hidden flex items-center gap-3">
-          <span
-            className="material-symbols-outlined text-primary text-[28px] icon-filled"
-            aria-hidden="true"
-          >
+          <span className="material-symbols-outlined text-primary text-[28px] icon-filled" aria-hidden="true">
             shield_lock
           </span>
           <span className="text-[22px] font-semibold tracking-tight text-primary">Vault</span>
         </div>
 
-        {/* Form container */}
         <div className="w-full max-w-[460px]">
-          {/* Heading */}
           <div className="mb-8 text-center lg:text-left">
-            {/* Lock icon badge */}
             <div
               className="w-12 h-12 bg-surface-container rounded-xl flex items-center justify-center mb-5 mx-auto lg:mx-0 border border-outline-variant"
               aria-hidden="true"
             >
               <span className="material-symbols-outlined text-primary text-[24px]">lock_person</span>
             </div>
-            <h1 className="text-headline-lg text-on-surface mb-2">
-              {mode === 'unlock' ? 'Unlock your Vault' : 'Create your Vault'}
-            </h1>
+            <h1 className="text-headline-lg text-on-surface mb-2">Unlock your Vault</h1>
+            {accountEmail && (
+              <p className="text-body-sm text-on-surface-variant mb-1">
+                Signed in as <span className="font-medium text-on-surface">{accountEmail}</span>
+              </p>
+            )}
             <p className="text-body-md text-on-surface-variant">
-              {mode === 'unlock'
-                ? 'Access your encrypted vault using your email and Master Password.'
-                : 'Create your secure encrypted vault using a Master Password.'}
+              Enter your master password to decrypt your local vault.
             </p>
           </div>
 
-          {/* Form */}
-          <form
-            onSubmit={mode === 'unlock' ? handleUnlockSubmit : handleCreateSubmit}
-            className="space-y-5"
-            noValidate
-          >
+          <form onSubmit={handleSubmit} className="space-y-5" noValidate>
             <Input
-              id="vault-email"
-              label="Email"
-              placeholder="Enter your email"
-              type="email"
-              value={email}
-              onChange={(e) => setEmail(e.target.value)}
-              autoComplete="email"
+              id="unlock-master-password"
+              label="Master Password"
+              placeholder="Enter your master password"
+              showToggle
+              value={masterPassword}
+              onChange={(e) => setMasterPassword(e.target.value)}
+              autoComplete="current-password"
               autoFocus
               required
             />
 
-            <Input
-              id="vault-master-password"
-              label="Master Password"
-              placeholder={mode === 'unlock' ? 'Enter your master password' : 'Choose a master password'}
-              showToggle
-              value={password}
-              onChange={(e) => setPassword(e.target.value)}
-              autoComplete={mode === 'unlock' ? 'current-password' : 'new-password'}
-              required
-            />
-
-            {mode === 'create' && (
-              <Input
-                id="vault-confirm-password"
-                label="Confirm Master Password"
-                placeholder="Confirm your master password"
-                showToggle
-                value={confirmPassword}
-                onChange={(e) => setConfirmPassword(e.target.value)}
-                autoComplete="new-password"
-                required
-              />
-            )}
-
-            {displayError && (
-              <div className="rounded-lg border border-error/20 bg-error-container px-4 py-3 text-on-error-container text-body-sm">
-                {displayError}
-              </div>
-            )}
-
-            {formSuccess && (
-              <div className="rounded-lg border border-success/20 bg-success-container px-4 py-3 text-on-success-container text-body-sm">
-                {formSuccess}
+            {error && (
+              <div
+                role="alert"
+                className="rounded-lg border border-error/20 bg-error-container px-4 py-3 text-on-error-container text-body-sm"
+              >
+                {error}
               </div>
             )}
 
             <Button
-              id={mode === 'unlock' ? 'unlock-submit-btn' : 'create-submit-btn'}
+              id="unlock-submit-btn"
               type="submit"
               variant="primary"
               className="w-full py-3 text-body-md"
               disabled={isSubmitting}
             >
-              <span className="material-symbols-outlined text-[18px]" aria-hidden="true">
-                {mode === 'unlock' ? 'lock_open' : 'add_circle'}
-              </span>
-              {isSubmitting ? (mode === 'unlock' ? 'Unlocking…' : 'Creating…') : mode === 'unlock' ? 'Unlock Vault' : 'Create Vault'}
+              <span className="material-symbols-outlined text-[18px]" aria-hidden="true">lock_open</span>
+              {isSubmitting ? 'Unlocking…' : 'Unlock Vault'}
             </Button>
           </form>
 
-          {/* Mode switch */}
+          {/* Allow the user to sign out and go back to Step 1 */}
           <div className="mt-7 text-center">
             <button
               type="button"
-              className="text-label-md text-primary hover:underline underline-offset-4 transition-colors"
-              onClick={handleModeSwitch}
+              className="text-label-md text-on-surface-variant hover:text-primary hover:underline underline-offset-4 transition-colors"
+              onClick={() => {
+                logout()
+                // RequireAuth will now redirect to /login
+              }}
             >
-              {mode === 'unlock' ? 'New to Vault?' : 'Already have a Vault?'}{' '}
-              <span className="font-medium">{mode === 'unlock' ? 'Create your Vault' : 'Unlock it'}</span>
+              Not you? Sign in with a different account
             </button>
           </div>
         </div>

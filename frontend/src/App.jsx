@@ -1,49 +1,43 @@
-import { useEffect, useRef, useState } from 'react'
-import { useLocation, useNavigate } from 'react-router-dom'
-import { UnlockPage } from './pages/UnlockPage.jsx'
+import { useEffect, useRef } from 'react'
+import { useNavigate } from 'react-router-dom'
 import { VaultPage } from './pages/VaultPage.jsx'
-import { getActiveVaultSession, initializeOrUnlockVault, lockVault } from './vault/vaultService.js'
+import { getActiveVaultSession, lockVault } from './vault/vaultService.js'
+import { useAuth } from './contexts/AuthContext.jsx'
 
 /**
- * App — route-aware shell for the original unlock/lock flow.
+ * VaultShell — thin wrapper rendered at /vault.
  *
- * The existing lock callback now flows through the router so the vault
- * page can call the original lockVault() logic and return to UnlockPage.
+ * Responsibilities:
+ *   • Auto-lock the vault after N minutes of inactivity.
+ *   • Provide onLock() to VaultPage, which clears both the vault
+ *     session AND the JWT (full logout on manual lock).
+ *
+ * Route guards (RequireAuth + RequireVault in main.jsx) already ensure
+ * this component only mounts when the user is authenticated and the vault
+ * is unlocked. No additional auth logic lives here.
  */
-export default function App() {
-  const [unlockError, setUnlockError] = useState('')
-  const autoLockTimerRef = useRef(null)
-  const location = useLocation()
+export default function VaultShell() {
   const navigate = useNavigate()
-  const isVaultView = location.pathname === '/vault'
+  const { logout } = useAuth()
+  const autoLockTimerRef = useRef(null)
 
+  /**
+   * onLock — called by VaultPage when the user clicks "Lock Vault".
+   *
+   * Design decision: manual lock = full logout.
+   * Rationale: A lingering JWT with no vault session is an awkward half-state.
+   * Requiring re-login after a manual lock is the cleaner, safer choice.
+   * JWT expiry auto-lock (in AuthContext) also lands here via the same logout().
+   */
   const handleLock = async () => {
-    await lockVault()
     clearTimeout(autoLockTimerRef.current)
-    navigate('/unlock')
+    await lockVault()
+    logout() // clears JWT + vault session; navigate is driven by RequireAuth re-evaluating
+    navigate('/login', { replace: true })
   }
 
-  const handleUnlock = async (password) => {
-    setUnlockError('')
-    try {
-      const result = await initializeOrUnlockVault(password)
-      if (!result.ok) {
-        setUnlockError('Incorrect master password. Please try again.')
-        return
-      }
-      navigate('/vault')
-    } catch (error) {
-      console.error('Unlock failed:', error)
-      setUnlockError('Unable to unlock the vault right now.')
-    }
-  }
-
+  // Auto-lock on inactivity
   useEffect(() => {
-    if (!isVaultView) {
-      clearTimeout(autoLockTimerRef.current)
-      return
-    }
-
     const resetTimer = () => {
       clearTimeout(autoLockTimerRef.current)
       const minutes = getActiveVaultSession()?.autoLockMinutes ?? 15
@@ -55,21 +49,13 @@ export default function App() {
 
     resetTimer()
     const events = ['mousemove', 'keydown', 'mousedown', 'touchstart']
-    events.forEach((eventName) => window.addEventListener(eventName, resetTimer))
+    events.forEach((e) => window.addEventListener(e, resetTimer))
 
     return () => {
       clearTimeout(autoLockTimerRef.current)
-      events.forEach((eventName) => window.removeEventListener(eventName, resetTimer))
+      events.forEach((e) => window.removeEventListener(e, resetTimer))
     }
-  }, [isVaultView])
+  }, []) // eslint-disable-line react-hooks/exhaustive-deps
 
-  return (
-    <div className="h-full">
-      {isVaultView ? (
-        <VaultPage onLock={handleLock} />
-      ) : (
-        <UnlockPage onUnlock={handleUnlock} error={unlockError} />
-      )}
-    </div>
-  )
+  return <VaultPage onLock={handleLock} />
 }
