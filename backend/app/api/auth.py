@@ -3,7 +3,10 @@ from datetime import datetime, timedelta, timezone
 from jose import JWTError, jwt
 from fastapi import APIRouter, Depends, HTTPException, status
 from fastapi.security import HTTPAuthorizationCredentials, HTTPBearer
+from fastapi import Request
 from passlib.context import CryptContext
+from slowapi import Limiter
+from slowapi.util import get_remote_address
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
@@ -13,8 +16,9 @@ from ..models.user import User
 from ..schemas.user import TokenResponse, UserCreate, UserLogin, UserResponse
 
 router = APIRouter()
-pwd_context = CryptContext(schemes=["bcrypt"], deprecated="auto")
+pwd_context = CryptContext(schemes=["bcrypt"], deprecated="auto", bcrypt__rounds=13)
 bearer_scheme = HTTPBearer()
+limiter = Limiter(key_func=get_remote_address)
 
 
 def get_db():
@@ -26,7 +30,8 @@ def get_db():
 
 
 @router.post("/register", response_model=UserResponse, status_code=status.HTTP_201_CREATED)
-def register_user(user_in: UserCreate, db: Session = Depends(get_db)):
+@limiter.limit("5/minute")
+def register_user(request: Request, user_in: UserCreate, db: Session = Depends(get_db)):
     normalized_email = user_in.email.strip().lower()
 
     existing_user = db.scalar(select(User).where(User.email == normalized_email))
@@ -51,7 +56,8 @@ def register_user(user_in: UserCreate, db: Session = Depends(get_db)):
 
 
 @router.post("/login", response_model=TokenResponse)
-def login_user(user_in: UserLogin, db: Session = Depends(get_db)):
+@limiter.limit("5/minute")
+def login_user(request: Request, user_in: UserLogin, db: Session = Depends(get_db)):
     normalized_email = user_in.email.strip().lower()
 
     user = db.scalar(select(User).where(User.email == normalized_email))

@@ -192,12 +192,6 @@ export async function createVault(password, db, options = {}) {
     kdfSalt: toArrayBuffer(salt),
     verifierIv: verifierEnvelope.iv,
     verifierCiphertext: verifierEnvelope.ciphertext,
-    migrationState: {
-      status: 'pending',
-      startedAt: null,
-      completedAt: null,
-      lastProcessedId: null
-    },
     autoLockMinutes
   }
 
@@ -225,7 +219,6 @@ export async function unlockVault(password, db) {
     autoLockMinutes: meta.autoLockMinutes ?? DEFAULT_AUTO_LOCK_MINUTES
   }
   setActiveVaultSession(session)
-  await ensureMigration(key)
   return { ok: true, session }
 }
 
@@ -246,16 +239,14 @@ export async function initializeOrUnlockVault(password, email, options = {}) {
         autoLockMinutes: created.meta.autoLockMinutes ?? DEFAULT_AUTO_LOCK_MINUTES
       }
       setActiveVaultSession(session)
-      await ensureMigration(created.key, db)
       return { ok: true, created: true, session }
     }
 
     const unlocked = await unlockVault(password, db)
     if (!unlocked.ok) return unlocked
-    
+
     unlocked.session.db = db
     setActiveVaultSession(unlocked.session)
-    await ensureMigration(unlocked.session.key, db)
     return unlocked
   } catch (error) {
     console.error('Original vault error:', error)
@@ -287,20 +278,11 @@ export function getVaultMeta() {
   return getDb().vaultMeta.get(VAULT_META_ID)
 }
 
-async function getEncryptedStore(type, db = getDb()) {
+async function getEncryptedStore(type) {
   switch (type) {
     case 'password': return getDb().encryptedPasswords
     case 'note': return getDb().encryptedNotes
     case 'file': return getDb().encryptedFiles
-    default: throw new Error(`Unsupported type: ${type}`)
-  }
-}
-
-function getLegacyStore(type, db = getDb()) {
-  switch (type) {
-    case 'password': return getDb().passwords
-    case 'note': return getDb().notes
-    case 'file': return getDb().files
     default: throw new Error(`Unsupported type: ${type}`)
   }
 }
@@ -452,88 +434,7 @@ export async function deleteVaultItem(type, id) {
   await store.delete(id)
 }
 
-export async function migrateLegacyRecords(dbRef, key, options = {}) {
-  const deleteLegacyAfterSuccess = options.deleteLegacyAfterSuccess ?? false
-  const meta = await dbRef.vaultMeta.get(VAULT_META_ID)
-  const baselineMeta = meta || {
-    id: VAULT_META_ID,
-    cryptoVersion: CRYPTO_VERSION,
-    kdfAlgorithm: KDF_ALGORITHM,
-    kdfIterations: KDF_ITERATIONS,
-    kdfSalt: new Uint8Array(16).buffer,
-    verifierIv: new Uint8Array(12).buffer,
-    verifierCiphertext: new Uint8Array(0).buffer,
-    migrationState: {},
-    autoLockMinutes: DEFAULT_AUTO_LOCK_MINUTES
-  }
 
-  const migrationState = {
-    ...(baselineMeta.migrationState || {}),
-    status: 'running',
-    startedAt: baselineMeta.migrationState?.startedAt || Date.now(),
-    lastProcessedId: baselineMeta.migrationState?.lastProcessedId || null
-  }
-
-  await dbRef.vaultMeta.put({ ...baselineMeta, migrationState })
-
-  const allTypes = [
-    { type: 'password', legacyStore: dbRef.passwords, encryptedStore: dbRef.encryptedPasswords },
-    { type: 'note', legacyStore: dbRef.notes, encryptedStore: dbRef.encryptedNotes },
-    { type: 'file', legacyStore: dbRef.files, encryptedStore: dbRef.encryptedFiles }
-  ]
-
-  let completed = true
-  for (const entry of allTypes) {
-    const legacyRecords = await entry.legacyStore.toArray()
-    for (const legacyRecord of legacyRecords) {
-      const existing = await entry.encryptedStore.get(legacyRecord.id)
-      if (existing) {
-        migrationState.lastProcessedId = legacyRecord.id
-        continue
-      }
-
-      try {
-        const encrypted = await encryptJson(legacyRecord, key)
-        await entry.encryptedStore.put({ id: legacyRecord.id, cryptoVersion: CRYPTO_VERSION, iv: encrypted.iv, ciphertext: encrypted.ciphertext })
-        migrationState.lastProcessedId = legacyRecord.id
-      } catch (error) {
-        completed = false
-        break
-      }
-    }
-    if (!completed) break
-  }
-
-  const updatedMeta = {
-    ...baselineMeta,
-    migrationState: {
-      ...migrationState,
-      status: completed ? 'completed' : 'failed',
-      completedAt: completed ? Date.now() : null,
-      lastProcessedId: migrationState.lastProcessedId
-    }
-  }
-
-  await dbRef.vaultMeta.put(updatedMeta)
-
-  if (completed && deleteLegacyAfterSuccess) {
-    await Promise.all([
-      dbRef.passwords.clear(),
-      dbRef.notes.clear(),
-      dbRef.files.clear()
-    ])
-  }
-
-  return updatedMeta
-}
-
-export async function ensureMigration(key) {
-  const meta = await db.vaultMeta.get(VAULT_META_ID)
-  if (!meta) return null
-  if (meta.migrationState?.status === 'completed') return meta
-
-  return migrateLegacyRecords(db, key, { deleteLegacyAfterSuccess: true })
-}
 
 export async function getVaultSnapshot() {
   const meta = await getDb().vaultMeta.get(VAULT_META_ID)

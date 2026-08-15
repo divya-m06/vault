@@ -24,6 +24,7 @@ sys.path.append(str(Path(__file__).resolve().parents[1]))
 from app.core.config import settings
 from app.db.database import Base, engine
 from app.main import app
+from app.api.auth import limiter
 
 # ---------------------------------------------------------------------------
 # Test setup — fresh schema for every test module run
@@ -35,6 +36,10 @@ client = TestClient(app)
 
 TEST_EMAIL = "authflow@example.com"
 TEST_PASSWORD = "Password123!"
+
+@pytest.fixture(autouse=True)
+def reset_rate_limit():
+    limiter._storage.reset()
 
 
 @pytest.fixture(scope="module", autouse=True)
@@ -135,3 +140,25 @@ class TestExpiredJWT:
         assert "password" not in body
         assert "password_hash" not in body
         assert "master_password" not in body
+
+
+# ---------------------------------------------------------------------------
+# 4. Rate limiting is enforced
+# ---------------------------------------------------------------------------
+class TestRateLimiting:
+    def test_login_rate_limit(self):
+        # We allow 5 requests per minute. We'll send 6.
+        # Use a dummy email to avoid side-effects
+        email = "ratelimit_test@example.com"
+        password = "Password123!"
+        
+        # Send 6 requests in rapid succession
+        responses = []
+        for _ in range(6):
+            resp = client.post("/login", json={"email": email, "password": password})
+            responses.append(resp)
+            
+        # The 6th request should be 429 Too Many Requests
+        assert responses[-1].status_code == 429
+        assert "Rate limit exceeded" in responses[-1].text
+
