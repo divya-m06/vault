@@ -72,18 +72,18 @@ export function Sidebar({ activeItem, onNavSelect, onLock, mobileOpen = false, o
   }
 
   const sidebarContent = (
-    <aside className="flex flex-col h-full bg-surface-container border-r border-outline-variant w-sidebar-width">
+    <aside className="flex flex-col h-full bg-surface-container border-r border-outline-variant w-sidebar-width dark:bg-[#0f1117] dark:border-[#2a3040]">
       {/* ── Brand header ───────────────────────────────────────────── */}
-      <div className="px-4 py-4 flex items-center gap-3 border-b border-outline-variant shrink-0">
+      <div className="px-4 py-4 flex items-center gap-3 border-b border-outline-variant shrink-0 dark:border-[#2a3040]">
         <div
           aria-hidden="true"
-          className="w-8 h-8 rounded-full bg-primary-container text-on-primary flex items-center justify-center text-headline-sm font-bold select-none"
+          className="w-8 h-8 rounded-full bg-primary-container text-on-primary flex items-center justify-center text-headline-sm font-bold select-none dark:bg-[#1f7a8c] dark:text-white"
         >
           V
         </div>
         <div>
-          <p className="text-headline-sm text-on-surface font-semibold leading-tight">Vault</p>
-          <p className="text-label-md text-on-surface-variant">Professional</p>
+          <p className="text-headline-sm text-on-surface font-semibold leading-tight dark:text-[#e4e8f5]">Vault</p>
+          <p className="text-label-md text-on-surface-variant dark:text-[#6b7280]">Professional</p>
         </div>
       </div>
 
@@ -102,9 +102,9 @@ export function Sidebar({ activeItem, onNavSelect, onLock, mobileOpen = false, o
         </button>
 
         {isAddMenuOpen && (
-          <div className="absolute left-3 right-3 top-full z-50 mt-2 rounded-xl border border-outline-variant bg-surface-container-lowest p-1.5 shadow-[0_12px_30px_-16px_rgba(15,23,42,0.35)]" role="menu" aria-label="Add to Vault">
-            <div className="border-b border-outline-variant/70 px-2 pb-2 mb-1">
-              <p className="text-label-md text-on-surface-variant">Add to Vault</p>
+          <div className="absolute left-3 right-3 top-full z-50 mt-2 rounded-xl border border-outline-variant bg-surface-container-lowest p-1.5 shadow-[0_12px_30px_-16px_rgba(15,23,42,0.35)] dark:border-[#2a3040] dark:bg-[#141820] dark:shadow-[0_12px_30px_-16px_rgba(0,0,0,0.7)]" role="menu" aria-label="Add to Vault">
+            <div className="border-b border-outline-variant/70 px-2 pb-2 mb-1 dark:border-[#2a3040]">
+              <p className="text-label-md text-on-surface-variant dark:text-[#6b7280]">Add to Vault</p>
             </div>
             {[
               { id: 'password', label: 'Password', icon: 'lock' },
@@ -116,7 +116,7 @@ export function Sidebar({ activeItem, onNavSelect, onLock, mobileOpen = false, o
                 type="button"
                 role="menuitem"
                 onClick={() => handleAddSelect(item.id)}
-                className="flex w-full items-center gap-2 rounded-lg px-3 py-2 text-left text-body-md text-on-surface transition-colors hover:bg-secondary-container/40 focus:outline-none focus-visible:ring-2 focus-visible:ring-primary-container"
+              className="flex w-full items-center gap-2 rounded-lg px-3 py-2 text-left text-body-md text-on-surface transition-colors hover:bg-secondary-container/40 dark:text-[#e4e8f5] dark:hover:bg-[#1e2330] focus:outline-none focus-visible:ring-2 focus-visible:ring-primary-container"
               >
                 <span className="material-symbols-outlined text-[18px] text-on-surface-variant" aria-hidden="true">{item.icon}</span>
                 <span>{item.label}</span>
@@ -149,7 +149,7 @@ export function Sidebar({ activeItem, onNavSelect, onLock, mobileOpen = false, o
       </nav>
 
       {/* ── Footer navigation ──────────────────────────────────────── */}
-      <div className="px-2 py-2 border-t border-outline-variant space-y-0.5 shrink-0">
+      <div className="px-2 py-2 border-t border-outline-variant space-y-0.5 shrink-0 dark:border-[#2a3040]">
         {FOOTER_ITEMS.map((item) => (
           <button
             key={item.id}

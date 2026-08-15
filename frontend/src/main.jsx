@@ -3,6 +3,7 @@ import { createRoot } from 'react-dom/client'
 import { BrowserRouter, Navigate, Route, Routes } from 'react-router-dom'
 import './index.css'
 import { AuthProvider } from './contexts/AuthContext.jsx'
+import { ThemeProvider } from './contexts/ThemeContext.jsx'
 import { RequireAuth } from './components/auth/RequireAuth.jsx'
 import { RequireVault } from './components/auth/RequireVault.jsx'
 import { LoginPage } from './pages/LoginPage.jsx'
@@ -22,7 +23,8 @@ import VaultShell from './App.jsx'
  */
 createRoot(document.getElementById('root')).render(
   <StrictMode>
-    <AuthProvider>
+    <ThemeProvider>
+      <AuthProvider>
       <BrowserRouter>
         <Routes>
           {/* Public routes — no auth required */}
@@ -56,6 +58,7 @@ createRoot(document.getElementById('root')).render(
           <Route path="*" element={<Navigate to="/login" replace />} />
         </Routes>
       </BrowserRouter>
-    </AuthProvider>
+      </AuthProvider>
+    </ThemeProvider>
   </StrictMode>,
 )

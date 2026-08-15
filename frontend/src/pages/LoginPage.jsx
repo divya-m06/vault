@@ -63,7 +63,7 @@ export function LoginPage() {
   return (
     <div className="flex min-h-screen w-full">
       {/* ── Left brand pane (desktop only) ──────────────────────────── */}
-      <div className="hidden lg:flex lg:w-1/2 bg-surface-container relative flex-col justify-between overflow-hidden">
+      <div className="hidden lg:flex lg:w-1/2 bg-surface-container dark:bg-[#141820] relative flex-col justify-between overflow-hidden">
         <div
           aria-hidden="true"
           className="absolute inset-0 z-0 pointer-events-none"
@@ -84,10 +84,10 @@ export function LoginPage() {
           </div>
           <div className="flex flex-1 flex-col justify-center">
             <div className="max-w-md">
-              <h2 className="text-[50px] font-semibold leading-tight text-on-surface tracking-tight mb-5">
+              <h2 className="text-[50px] font-semibold leading-tight text-on-surface dark:text-[#e4e8f5] tracking-tight mb-5">
                 Your digital life,<br />secured.
               </h2>
-              <p className="text-body-lg text-on-surface-variant leading-relaxed max-w-[30rem]">
+              <p className="text-body-lg text-on-surface-variant dark:text-[#a0aec0] leading-relaxed max-w-[30rem]">
                 Precision-engineered encryption for the modern professional. Access your sensitive data,
                 secure notes, and credentials within an isolated, zero-knowledge environment.
               </p>
@@ -111,7 +111,7 @@ export function LoginPage() {
       </div>
 
       {/* ── Right form pane ──────────────────────────────────────────── */}
-      <div className="w-full lg:w-1/2 bg-surface-container-lowest flex items-center justify-center p-8 lg:px-10 relative">
+      <div className="w-full lg:w-1/2 bg-surface-container-lowest dark:bg-[#0f1117] flex items-center justify-center p-8 lg:px-10 relative">
         {/* Mobile brand header */}
         <div className="absolute top-8 left-8 lg:hidden flex items-center gap-3">
           <span className="material-symbols-outlined text-primary text-[28px] icon-filled" aria-hidden="true">
@@ -128,8 +128,8 @@ export function LoginPage() {
             >
               <span className="material-symbols-outlined text-primary text-[24px]">lock_person</span>
             </div>
-            <h1 className="text-headline-lg text-on-surface mb-2">Sign in to Vault</h1>
-            <p className="text-body-md text-on-surface-variant">
+            <h1 className="text-headline-lg text-on-surface dark:text-[#e4e8f5] mb-2">Sign in to Vault</h1>
+            <p className="text-body-md text-on-surface-variant dark:text-[#a0aec0]">
               Enter your account credentials to continue.
             </p>
           </div>

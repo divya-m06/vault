@@ -366,9 +366,9 @@ export function VaultPage({ onLock }) {
             </button>
 
             {isAddMenuOpen && activeNav === 'all' && (
-              <div className="absolute right-0 top-full z-50 mt-2 w-52 rounded-xl border border-outline-variant bg-surface-container-lowest p-1.5 shadow-[0_12px_30px_-16px_rgba(15,23,42,0.35)]" role="menu" aria-label="Add to Vault">
-                <div className="border-b border-outline-variant/70 px-2 pb-2 mb-1">
-                  <p className="text-label-md text-on-surface-variant">Add to Vault</p>
+              <div className="absolute right-0 top-full z-50 mt-2 w-52 rounded-xl border border-outline-variant bg-surface-container-lowest p-1.5 shadow-[0_12px_30px_-16px_rgba(15,23,42,0.35)] dark:border-[#2a3040] dark:bg-[#141820] dark:shadow-[0_12px_30px_-16px_rgba(0,0,0,0.7)]" role="menu" aria-label="Add to Vault">
+                <div className="border-b border-outline-variant/70 px-2 pb-2 mb-1 dark:border-[#2a3040]">
+                  <p className="text-label-md text-on-surface-variant dark:text-[#6b7280]">Add to Vault</p>
                 </div>
                 {[
                   { id: 'password', label: 'Password', icon: 'lock' },
@@ -380,7 +380,7 @@ export function VaultPage({ onLock }) {
                     type="button"
                     role="menuitem"
                     onClick={() => handleCreateItem(item.id)}
-                    className="flex w-full items-center gap-2 rounded-lg px-3 py-2 text-left text-body-md text-on-surface transition-colors hover:bg-secondary-container/40 focus:outline-none focus-visible:ring-2 focus-visible:ring-primary-container"
+                    className="flex w-full items-center gap-2 rounded-lg px-3 py-2 text-left text-body-md text-on-surface transition-colors hover:bg-secondary-container/40 dark:text-[#e4e8f5] dark:hover:bg-[#1e2330] focus:outline-none focus-visible:ring-2 focus-visible:ring-primary-container"
                   >
                     <span className="material-symbols-outlined text-[18px] text-on-surface-variant" aria-hidden="true">{item.icon}</span>
                     <span>{item.label}</span>
@@ -392,18 +392,18 @@ export function VaultPage({ onLock }) {
         </div>
 
         {/* Item table */}
-        <div className="border border-outline-variant rounded-lg overflow-hidden bg-surface-container-lowest shadow-sm">
+        <div className="border border-outline-variant rounded-lg overflow-hidden bg-surface-container-lowest shadow-sm dark:border-[#2a3040] dark:bg-[#141820]">
           {/* Table header — hidden on mobile */}
-          <div className="hidden sm:grid grid-cols-[40px_1.5fr_1.5fr_160px] gap-4 px-4 py-2.5 bg-[#F8F9FD] border-b border-outline-variant">
+          <div className="hidden sm:grid grid-cols-[40px_1.5fr_1.5fr_160px] gap-4 px-4 py-2.5 bg-[#F8F9FD] border-b border-outline-variant dark:bg-[#1a1f2e] dark:border-[#2a3040]">
             <div />
-            <div className="font-label-bold text-label-bold text-on-surface-variant uppercase tracking-wide">Item Name</div>
-            <div className="font-label-bold text-label-bold text-on-surface-variant uppercase tracking-wide">Details</div>
-            <div className="font-label-bold text-label-bold text-on-surface-variant uppercase tracking-wide text-right">Last Modified</div>
+            <div className="font-label-bold text-label-bold text-on-surface-variant uppercase tracking-wide dark:text-[#6b7280]">Item Name</div>
+            <div className="font-label-bold text-label-bold text-on-surface-variant uppercase tracking-wide dark:text-[#6b7280]">Details</div>
+            <div className="font-label-bold text-label-bold text-on-surface-variant uppercase tracking-wide text-right dark:text-[#6b7280]">Last Modified</div>
           </div>
 
           {/* Rows */}
           {filtered.length === 0 ? (
-            <div className="flex min-h-[280px] items-center justify-center border-t border-outline-variant/70 bg-surface-container-lowest px-6 py-10">
+            <div className="flex min-h-[280px] items-center justify-center border-t border-outline-variant/70 bg-surface-container-lowest px-6 py-10 dark:border-[#2a3040] dark:bg-[#141820]">
               <div className="flex max-w-md flex-col items-center text-center">
                 <div className="mb-3 flex h-10 w-10 items-center justify-center rounded-full bg-surface-container-high text-on-surface-variant">
                   <span className="material-symbols-outlined text-[20px]" aria-hidden="true">
@@ -548,7 +548,7 @@ export function VaultPage({ onLock }) {
   }
 
   return (
-    <div className="flex h-full overflow-hidden bg-surface">
+    <div className="flex h-full overflow-hidden bg-surface dark:bg-[#0f1117]">
       {/* Sidebar (desktop fixed / mobile drawer) */}
       <Sidebar
         activeItem={activeNav}
@@ -574,7 +574,7 @@ export function VaultPage({ onLock }) {
         {/* Content canvas */}
         <main
           id="vault-main-content"
-          className="flex-1 overflow-y-auto p-container-padding bg-surface"
+          className="flex-1 overflow-y-auto p-container-padding bg-surface dark:bg-[#0f1117]"
           aria-label="Vault content"
         >
           {renderMainContent()}
@@ -582,7 +582,7 @@ export function VaultPage({ onLock }) {
 
         {/* ── Mobile bottom navigation bar ────────────────────────────── */}
         <nav
-          className="md:hidden flex items-center justify-around h-14 border-t border-outline-variant bg-surface-container-lowest shrink-0"
+          className="md:hidden flex items-center justify-around h-14 border-t border-outline-variant bg-surface-container-lowest dark:bg-[#141820] dark:border-[#2a3040] shrink-0"
           aria-label="Bottom navigation"
         >
           {[

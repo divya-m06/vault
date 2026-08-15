@@ -64,6 +64,9 @@
   }
 
   /* Input field — default state */
+  /* NOTE: Do NOT put dark:/hover: variants inside @apply — Tailwind v3 does not
+     support variant-prefixed utilities in @apply. Dark overrides live below
+     in plain CSS .dark .classname blocks. */
   .vault-input {
     @apply w-full bg-surface-container-lowest border border-outline-variant rounded-md
            px-4 py-2.5 text-body-md text-on-surface placeholder:text-on-surface-variant/60
@@ -117,4 +120,89 @@
            hover:bg-secondary-container/30 transition-colors duration-100 cursor-pointer
            group;
   }
+}
+
+/* ── Dark mode overrides ──────────────────────────────────────
+   Tailwind v3 does not support dark:/hover: prefixes inside @apply,
+   so component-class dark overrides are written as plain CSS
+   descendant selectors (.dark .classname).
+   ─────────────────────────────────────────────────────────── */
+
+/* Body & root surfaces */
+.dark body,
+.dark #root {
+  background-color: #0f1117;
+  color: #e4e8f5;
+}
+
+/* Scrollbars */
+.dark ::-webkit-scrollbar-thumb {
+  background-color: #3f484b;
+}
+.dark ::-webkit-scrollbar-thumb:hover {
+  background-color: #6f797c;
+}
+
+/* Input */
+.dark .vault-input {
+  background-color: #1e2330;
+  border-color: #3a4050;
+  color: #e4e8f5;
+}
+.dark .vault-input::placeholder {
+  color: #6b7280;
+}
+.dark .vault-input:focus {
+  border-color: #1f7a8c;
+  box-shadow: 0 0 0 1px #1f7a8c;
+}
+
+/* Primary button */
+.dark .btn-primary {
+  background-color: #1f7a8c;
+  color: #ffffff;
+}
+.dark .btn-primary:hover {
+  background-color: #006070;
+}
+
+/* Secondary button */
+.dark .btn-secondary {
+  border-color: #3a4050;
+  color: #a0aec0;
+}
+.dark .btn-secondary:hover {
+  background-color: #1e2330;
+  color: #e4e8f5;
+}
+
+/* Icon button */
+.dark .btn-icon {
+  color: #a0aec0;
+}
+.dark .btn-icon:hover {
+  background-color: #1e2330;
+  color: #e4e8f5;
+}
+
+/* Nav items */
+.dark .nav-item {
+  color: #a0aec0;
+}
+.dark .nav-item:hover {
+  background-color: #1e2330;
+  color: #e4e8f5;
+}
+
+.dark .nav-item-active {
+  background-color: #1f3a45;
+  color: #83d2e6;
+}
+
+/* Table row */
+.dark .vault-row {
+  border-bottom-color: #2a3040;
+}
+.dark .vault-row:hover {
+  background-color: #1e2a35;
 }
