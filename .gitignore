@@ -9,7 +9,7 @@ build/
 .env
 .env.*
 !.env.example
-!frontend/.env
+frontend/.env
 
 # Python / FastAPI
 __pycache__/
