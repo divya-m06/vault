@@ -45,10 +45,13 @@ export function ConfirmDialog({
   useEffect(() => {
     if (isOpen && dialogRef.current) {
       // Small timeout to ensure render before focus
-      setTimeout(() => {
-        const confirmBtn = dialogRef.current.querySelector('button[data-confirm]')
-        if (confirmBtn) confirmBtn.focus()
+      const timeoutId = setTimeout(() => {
+        if (dialogRef.current) {
+          const confirmBtn = dialogRef.current.querySelector('button[data-confirm]')
+          if (confirmBtn) confirmBtn.focus()
+        }
       }, 50)
+      return () => clearTimeout(timeoutId)
     }
   }, [isOpen])
 

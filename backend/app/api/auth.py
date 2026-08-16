@@ -6,9 +6,21 @@ from fastapi.security import HTTPAuthorizationCredentials, HTTPBearer
 from fastapi import Request
 from passlib.context import CryptContext
 from slowapi import Limiter
-from slowapi.util import get_remote_address
+from starlette.requests import Request as StarletteRequest
 from sqlalchemy import select
 from sqlalchemy.orm import Session
+
+
+def get_client_ip(request: StarletteRequest) -> str:
+    """Rate-limit key function using the actual socket connection IP.
+
+    Does NOT trust X-Forwarded-For or X-Real-IP headers since this app
+    runs without a reverse proxy. If a proxy is added later, this would
+    need explicit trusted-proxy configuration.
+    """
+    if request.client:
+        return request.client.host
+    return "unknown"
 
 from ..core.config import settings
 from ..db.database import SessionLocal
@@ -18,7 +30,7 @@ from ..schemas.user import TokenResponse, UserCreate, UserLogin, UserResponse
 router = APIRouter()
 pwd_context = CryptContext(schemes=["bcrypt"], deprecated="auto", bcrypt__rounds=13)
 bearer_scheme = HTTPBearer()
-limiter = Limiter(key_func=get_remote_address)
+limiter = Limiter(key_func=get_client_ip)
 
 
 def get_db():
@@ -117,3 +129,12 @@ def get_me(current_user: User = Depends(get_current_user)):
     server-side JWT expiry enforcement. No vault data is returned here.
     """
     return current_user
+
+
+@router.get("/debug/client-ip")
+def debug_client_ip(request: Request):
+    """Debug endpoint to see what the server sees for client IP."""
+    return {
+        "client_host": request.client.host if request.client else None,
+        "headers": dict(request.headers),
+    }

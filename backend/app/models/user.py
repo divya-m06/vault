@@ -1,9 +1,10 @@
 import uuid
 from datetime import datetime, timezone
+from typing import List
 
 from sqlalchemy import DateTime, String
 from sqlalchemy.dialects.postgresql import UUID
-from sqlalchemy.orm import Mapped, mapped_column
+from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from ..db.database import Base
 
@@ -28,4 +29,11 @@ class User(Base):
         DateTime(timezone=True),
         nullable=False,
         default=lambda: datetime.now(timezone.utc),
+    )
+
+    vault_meta: Mapped["VaultMeta"] = relationship(
+        "VaultMeta", back_populates="user", uselist=False, cascade="all, delete-orphan"
+    )
+    vault_items: Mapped[List["VaultItem"]] = relationship(
+        "VaultItem", back_populates="user", cascade="all, delete-orphan"
     )

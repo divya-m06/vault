@@ -1,33 +1,41 @@
 import { useState } from 'react'
-import { useNavigate } from 'react-router-dom'
+import { useLocation, useNavigate } from 'react-router-dom'
 import { loginUser } from '../api/auth.js'
 import { Button } from '../components/ui/Button.jsx'
 import { Input } from '../components/ui/Input.jsx'
 import { useAuth } from '../contexts/AuthContext.jsx'
 import { deriveAuthValue, initializeOrUnlockVault } from '../vault/vaultService.js'
+
 /**
  * LoginPage — Unified auth and vault unlock flow.
  *
  * The user enters their email and password.
- * 1. An authValue is derived from the password + email.
- * 2. authValue is sent to the backend for account login.
+ * 1. An authValue is derived client-side from the password + email (PBKDF2, 250k iterations).
+ * 2. authValue is sent to the backend for account login (bcrypt verify).
  * 3. On success, the raw password is used to derive the local vault key.
- * 
+ *
  * ZERO-KNOWLEDGE NOTE: Only the derived authValue reaches the network.
  * The raw password is NEVER sent to any endpoint. A backend breach exposing
  * the authValue hash cannot be used to reconstruct the vault key.
  */
 export function LoginPage() {
   const navigate = useNavigate()
+  const location = useLocation()
   const { login } = useAuth()
-  const [email, setEmail] = useState('')
+  // When redirected here after a successful registration, pre-fill the email
+  // and show a friendly notice (via route state) so the user can sign in.
+  const [email, setEmail] = useState(location.state?.email ?? '')
   const [password, setPassword] = useState('')
+  const [notice, setNotice] = useState(location.state?.message ?? '')
   const [error, setError] = useState('')
+  const [isFailedLogin, setIsFailedLogin] = useState(false)
   const [isSubmitting, setIsSubmitting] = useState(false)
 
   const handleSubmit = async (event) => {
     event.preventDefault()
     setError('')
+    setNotice('')
+    setIsFailedLogin(false)
 
     if (!email.trim()) {
       setError('Please enter an email address.')
@@ -44,9 +52,9 @@ export function LoginPage() {
       const emailTrimmed = email.trim()
       const authValue = await deriveAuthValue(password, emailTrimmed)
       const data = await loginUser(emailTrimmed, authValue)
-      
+
       login(data.access_token)
-      
+
       const vaultResult = await initializeOrUnlockVault(password, emailTrimmed)
       if (!vaultResult?.ok) {
         throw new Error('Account login succeeded, but vault unlock failed. Please try again or use the unlock screen.')
@@ -54,7 +62,13 @@ export function LoginPage() {
 
       navigate('/vault', { replace: true })
     } catch (err) {
-      setError(err.message || 'Login failed. Please try again.')
+      if (err.status === 401) {
+        // Keep this generic to avoid revealing whether the email is registered.
+        setError('Incorrect email or password')
+        setIsFailedLogin(true)
+      } else {
+        setError(err.message || 'Login failed. Please try again.')
+      }
     } finally {
       setIsSubmitting(false)
     }
@@ -103,8 +117,8 @@ export function LoginPage() {
               <span className="text-label-md">Zero-Knowledge Architecture</span>
             </div>
             <div className="flex items-center gap-2">
-              <span className="material-symbols-outlined text-[18px]" aria-hidden="true">wifi_off</span>
-              <span className="text-label-md">Works Offline</span>
+              <span className="material-symbols-outlined text-[18px]" aria-hidden="true">cloud_sync</span>
+              <span className="text-label-md">Cloud Synced</span>
             </div>
           </div>
         </div>
@@ -141,7 +155,7 @@ export function LoginPage() {
               type="email"
               placeholder="you@example.com"
               value={email}
-              onChange={(e) => setEmail(e.target.value)}
+              onChange={(e) => { setEmail(e.target.value); setNotice('') }}
               autoComplete="email"
               autoFocus
               required
@@ -153,10 +167,19 @@ export function LoginPage() {
               placeholder="Enter your password"
               showToggle
               value={password}
-              onChange={(e) => setPassword(e.target.value)}
+              onChange={(e) => { setPassword(e.target.value); setNotice('') }}
               autoComplete="current-password"
               required
             />
+
+            {notice && (
+              <div
+                role="status"
+                className="rounded-lg border border-success/20 bg-success-container px-4 py-3 text-on-success-container text-body-sm"
+              >
+                {notice}
+              </div>
+            )}
 
             {error && (
               <div
@@ -164,6 +187,9 @@ export function LoginPage() {
                 className="rounded-lg border border-error/20 bg-error-container px-4 py-3 text-on-error-container text-body-sm"
               >
                 {error}
+                {isFailedLogin && (
+                  <p className="mt-1 text-body-sm opacity-90">Double confirm your email/password.</p>
+                )}
               </div>
             )}
 

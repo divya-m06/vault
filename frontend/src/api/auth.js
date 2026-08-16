@@ -52,7 +52,9 @@ export async function loginUser(email, password) {
   })
 
   if (!response.ok) {
-    throw new Error(await parseErrorMessage(response))
+    const error = new Error(await parseErrorMessage(response))
+    error.status = response.status
+    throw error
   }
 
   return response.json()

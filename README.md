@@ -2,75 +2,93 @@
 
 ## Project Introduction
 
-Vault is an offline-first web application for storing password entries, secure notes, and files in a browser-local encrypted vault. It pairs a React client with a FastAPI/PostgreSQL authentication service. Vault content is encrypted and persisted on the client; the backend stores account credentials only.
+Vault is a zero-knowledge, cloud-synced password manager for password entries, secure
+notes, and files. It pairs a React client with a FastAPI/PostgreSQL backend. All vault
+content is encrypted in the browser before it leaves the device; the server stores only
+opaque ciphertext and account credentials.
 
 ## Features
 
-- Create, view, edit, search, and delete password entries and secure notes.
-- Add locally stored files, download them, and preview images.
-- Encrypt password, note, and file records in the browser before they are written to IndexedDB.
-- Create or unlock a vault with a locally derived master-password key.
+- Create, view, edit, search, and delete password entries, secure notes, and files.
+- Upload files, download them, and preview images.
+- Encrypt every record in the browser with AES-256-GCM before it is sent to the backend.
+- Two-step access: account sign-in (email + password → JWT), then vault unlock
+  (master password → in-memory encryption key).
+- Cloud-synced encrypted vault, accessible from any device signed into your account.
 - Configurable inactivity auto-lock (5, 15, 30, or 60 minutes, or never).
-- Account registration and login API endpoints with password hashing and JWT issuance.
-- Offline local storage through IndexedDB and Dexie.
+- Account registration and login with bcrypt password hashing and JWT issuance.
+- Rate-limited API endpoints.
 
 ## Architecture
 
 ```text
 React + Vite client
-  ├─ Web Crypto API: PBKDF2 key derivation and AES-GCM encryption
-  ├─ Dexie / IndexedDB: encrypted vault records and vault metadata
-  └─ HTTP client: registration and login requests
+  ├─ Web Crypto API: two PBKDF2 derivations + AES-GCM encryption
+  ├─ JWT (localStorage): account session token
+  └─ HTTPS client: JWT-authenticated vault API calls
               │
               ▼
-FastAPI API
-  ├─ /register: bcrypt-hashed account password in PostgreSQL
-  └─ /login: HS256 JWT access token
+FastAPI API  (rate-limited)
+  ├─ /auth: /register, /login, /me (JWT)
+  ├─ /vault/meta: vault KDF metadata
+  └─ /vault/items: encrypted records (CRUD)
               │
               ▼
-PostgreSQL: users table (email, bcrypt password hash, timestamps)
+PostgreSQL
+  ├─ users: email, bcrypt hash, timestamps
+  ├─ vault_meta: KDF salt, verifier, auto-lock minutes
+  └─ vault_items: user_id, IV, ciphertext
 ```
 
-Vault content has no API endpoint and is not sent to the server. Passwords, notes, and files remain in the browser's IndexedDB database.
+The server stores only encrypted blobs — it never sees plaintext passwords, notes, or
+files. Vault content is decrypted exclusively in the browser.
 
 ## Zero-Knowledge Design
 
-Vault is zero-knowledge with respect to vault contents because encryption and decryption take place exclusively in the browser:
+Two independent derivations are performed in the browser from the master password:
 
-- The master password is used locally to derive a non-extractable AES-256-GCM key with PBKDF2-HMAC-SHA-256, a random 16-byte salt, and 250,000 iterations.
-- A randomly generated 12-byte IV is used for each AES-GCM encryption operation.
-- IndexedDB stores encrypted records as ciphertext plus their IV, along with non-secret vault metadata such as the KDF salt and encrypted verifier.
-- The derived key is held only in the active in-memory browser session and is cleared when the vault is locked.
+1. **Encryption key (never leaves the browser).** PBKDF2-HMAC-SHA-256 with a random
+   16-byte salt and 250,000 iterations derives a non-extractable AES-256-GCM key. A
+   random 12-byte IV is used for each encryption. The key exists only in memory and is
+   cleared when the vault locks.
+2. **Auth value (sent to the server).** A second PBKDF2-HMAC-SHA-256 derivation, salted
+   with SHA-256(email + "vault-auth-v1"), produces an `authValue` transmitted as the
+   account password and bcrypt-hashed server-side.
 
-The backend never has access to plaintext vault data because no vault records, encryption keys, master-password-derived keys, or decrypted files are transmitted to it. PostgreSQL contains user-account data, not vault contents.
+Because the two derivations use different salts, a server compromise exposes only the
+bcrypt hash of the auth value and reveals nothing about the AES encryption key. The
+server receives no key material, no master password, and no plaintext records.
 
 ## Security
 
 ### Authentication
 
-The FastAPI backend registers users in PostgreSQL, normalizes email addresses, and hashes account passwords with bcrypt through Passlib. `POST /login` verifies the bcrypt hash and returns an HS256 JWT access token with a configurable expiration (30 minutes by default). The frontend persists a returned access token in `localStorage`.
-
-The active unlock route currently uses the local master-password flow directly; it does not call the login endpoint during unlock. Account creation does call `POST /register`. The repository includes frontend API and authentication-context code for login, but account authentication is not yet enforced as a gate for the active vault route.
+- `POST /register` normalizes the email and stores a bcrypt hash (13 rounds, Passlib).
+- `POST /login` verifies the hash and returns an HS256 JWT (python-jose) with a
+  configurable expiry (30 minutes by default).
+- Protected routes use a JWT bearer dependency that validates signature and `exp`.
+- The raw account password is never sent; the client sends the derived `authValue`.
+- Login/register are limited to 5 requests/min/IP; vault endpoints 30–60/min/IP.
 
 ### Vault Protection
 
-- AES-GCM provides authenticated encryption for vault record payloads.
-- A separately encrypted random verifier checks whether the entered master password can decrypt the vault.
-- The master password is not deliberately saved in `localStorage`, `sessionStorage`, or cookies.
-- Auto-lock clears the active in-memory vault session after configured inactivity.
+- AES-256-GCM provides authenticated encryption for every record payload.
+- A separately encrypted random verifier confirms the master password before unlock.
+- The master password and encryption key are never written to storage.
+- Auto-lock clears the in-memory key and React state after inactivity.
 
-This project is an in-progress application and has not been presented as independently security-audited. Clearing browser site data can delete the locally stored vault.
+This project is in-progress and has not been independently security-audited. Clearing
+browser site data logs you out; the encrypted vault remains on the server.
 
 ## Tech Stack
 
 | Area | Technologies |
 |------|--------------|
 | Frontend | React, Vite, Tailwind CSS, React Router |
-| Backend | Python, FastAPI, SQLAlchemy |
+| Backend | Python, FastAPI, SQLAlchemy 2.0, SlowAPI |
 | Database | PostgreSQL |
-| Authentication | JWT, bcrypt |
-| Encryption | Web Crypto API, PBKDF2, AES-GCM |
-| Local Storage | IndexedDB, Dexie |
+| Authentication | JWT (HS256), bcrypt (Passlib) |
+| Encryption | Web Crypto API, PBKDF2-HMAC-SHA-256, AES-256-GCM |
 
 ## Project Structure
 
@@ -78,20 +96,22 @@ This project is an in-progress application and has not been presented as indepen
 .
 ├── backend/
 │   ├── app/
-│   │   ├── api/auth.py          # Registration and login endpoints
-│   │   ├── core/config.py       # Environment-based settings
-│   │   ├── db/database.py       # SQLAlchemy engine and session
-│   │   ├── models/user.py       # PostgreSQL user model
-│   │   └── main.py              # FastAPI application
+│   │   ├── api/auth.py        # Register, login, JWT dependency
+│   │   ├── api/vault.py       # Vault meta + item CRUD endpoints
+│   │   ├── core/config.py     # Environment-based settings
+│   │   ├── db/database.py     # SQLAlchemy engine and session
+│   │   ├── models/            # User, VaultItem, VaultMeta
+│   │   ├── schemas/           # Pydantic request/response models
+│   │   └── main.py            # FastAPI app + middleware
 │   ├── requirements.txt
 │   └── tests/
 ├── frontend/
 │   ├── src/
-│   │   ├── api/                 # Backend API client
-│   │   ├── components/          # UI and vault components
-│   │   ├── db/db.js             # IndexedDB schema
-│   │   ├── pages/               # Unlock and vault views
-│   │   └── vault/vaultService.js# Encryption and vault persistence
+│   │   ├── api/               # Auth API client
+│   │   ├── components/        # UI and vault components
+│   │   ├── contexts/          # Auth and theme providers
+│   │   ├── pages/             # Login, register, unlock, vault
+│   │   └── vault/vaultService.js  # Derivation, encryption, vault API
 │   ├── package.json
 │   └── tests/
 ├── .env.example
@@ -103,36 +123,43 @@ This project is an in-progress application and has not been presented as indepen
 ### Prerequisites
 
 - Node.js and npm
-- Python 3.10+ recommended
-- PostgreSQL
+- Python 3.10+
+- PostgreSQL running locally
 
-### 1. Configure the backend
+### 1. Create the database
 
-Create `backend/.env` with the variables described below. The backend loads this exact path at startup.
+```sql
+CREATE DATABASE vaultdb;
+```
 
-Install Python dependencies from the repository root:
+### 2. Configure and start the backend
+
+Create `backend/.env`:
+
+```dotenv
+DATABASE_URL=postgresql+psycopg2://postgres:postgres@localhost:5432/vaultdb
+SECRET_KEY=change-me-to-a-long-random-string
+ACCESS_TOKEN_EXPIRE_MINUTES=30
+CORS_ALLOWED_ORIGINS=http://localhost:5173
+```
+
+Install dependencies and run:
 
 ```bash
 python -m pip install -r backend/requirements.txt
+python -m uvicorn backend.app.main:app --reload --port 8000
 ```
 
-Start the API:
+Tables are created automatically on startup (`Base.metadata.create_all`). The API is
+available at `http://localhost:8000`; health check is `GET /health`.
 
-```bash
-python -m uvicorn backend.app.main:app --reload --host 0.0.0.0 --port 8000
-```
+### 3. Configure and start the frontend
 
-The API is available at `http://localhost:8000`; its health endpoint is `GET /health`.
-
-### 2. Configure and start the frontend
-
-Create `frontend/.env.local`:
+Create `frontend/.env`:
 
 ```dotenv
 VITE_API_BASE_URL=http://localhost:8000
 ```
-
-Install dependencies and start Vite:
 
 ```bash
 cd frontend
@@ -140,11 +167,10 @@ npm install
 npm run dev
 ```
 
-Vite serves the client at the URL it prints (normally `http://localhost:5173`). The backend permits that origin by default.
+Vite serves the client at `http://localhost:5173`. The backend permits that origin by
+default.
 
 ## Environment Variables
-
-The included root `.env.example` lists the required backend values. The application code reads them from `backend/.env`.
 
 | Variable | Required | Purpose |
 | --- | --- | --- |
@@ -152,32 +178,24 @@ The included root `.env.example` lists the required backend values. The applicat
 | `SECRET_KEY` | Yes | Secret used to sign JWT access tokens. |
 | `ACCESS_TOKEN_EXPIRE_MINUTES` | No | JWT lifetime in minutes; defaults to `30`. |
 | `CORS_ALLOWED_ORIGINS` | No | Comma-separated allowed client origins; defaults to `http://localhost:5173`. |
-| `VITE_API_BASE_URL` | Yes for account API calls | Frontend base URL for the FastAPI API. Set in `frontend/.env.local`. |
+| `VITE_API_BASE_URL` | Yes for API calls | Frontend base URL for the FastAPI API. Set in `frontend/.env`. |
 
 Never commit real secrets or database credentials.
 
 ## Current Status
 
-Vault currently supports a local encrypted vault for passwords, notes, and files, including file download and image preview. Local data is encrypted at rest in IndexedDB and the vault can auto-lock.
-
-The FastAPI/PostgreSQL registration and login endpoints are implemented. The registration flow in the active unlock page calls the API, but the active unlock callback currently opens the local vault without invoking API login or enforcing the JWT. There is no vault-data backend, synchronization, deployment configuration, refresh-token flow, or password-recovery mechanism in the current implementation.
+Working two-step auth (JWT gate + vault unlock), encrypted cloud-synced records, file
+upload/download/image preview, auto-lock. There is no refresh-token flow or password
+recovery yet.
 
 ## Future Roadmap
 
-- Integrate API authentication and JWT enforcement into the active vault entry flow.
-- Add protected backend endpoints only if a future design requires them without compromising client-side encryption.
 - Add automated frontend and backend test execution to project scripts and CI.
-- Define a backup/export and recovery strategy appropriate for local encrypted data.
-- Introduce managed database migrations.
-
-## Screenshot Placeholders
-
-<!-- Add screenshots here when they are available. -->
-
-- `[Placeholder]` Unlock and vault-creation screen
-- `[Placeholder]` Vault item list and search
-- `[Placeholder]` Password, secure-note, and file detail views
+- Define a backup/export and recovery strategy for encrypted data.
+- Introduce managed database migrations (the SQLAlchemy configuration can be extended
+  with Alembic later).
 
 ## License
 
-No license file is currently included in this repository. All rights are reserved until a license is added by the project owner.
+No license file is currently included in this repository. All rights are reserved until
+a license is added by the project owner.

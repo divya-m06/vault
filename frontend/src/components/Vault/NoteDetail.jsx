@@ -110,13 +110,20 @@ export function NoteDetail({ item, onEdit, onDelete, onBack }) {
       <ConfirmDialog 
         isOpen={isConfirmOpen}
         title="Delete note?"
-        message={<span>“<span className="font-label-bold text-on-surface">{item.title}</span>” will be permanently removed from this device.</span>}
+        message={<span>“<span className="font-label-bold text-on-surface">{item.title}</span>” will be permanently removed from your vault.</span>}
         confirmText="Delete"
         cancelText="Cancel"
         isProcessing={isDeleting}
         onConfirm={async () => {
           setIsDeleting(true)
-          await onDelete(item.id)
+          try {
+            await onDelete(item.id)
+          } catch {
+            // Parent (VaultPage) surfaces the failure; ensure dialog closes.
+          } finally {
+            setIsDeleting(false)
+            setIsConfirmOpen(false)
+          }
         }}
         onCancel={() => setIsConfirmOpen(false)}
       />

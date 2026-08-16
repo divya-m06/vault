@@ -52,7 +52,7 @@ function shortFileType(mimeType) {
 /**
  * Main Vault page.
  *
- * Stage 1: Uses Dexie.js for local persistence.
+ * Vault data is encrypted client-side and stored server-side (PostgreSQL).
  * View state transitions: 'list' <-> 'add_password' | 'add_note' | 'add_file' | 'edit_X' | 'detail'
  */
 export function VaultPage({ onLock }) {
@@ -172,7 +172,7 @@ export function VaultPage({ onLock }) {
     setStorageError(null)
   }
 
-  // Reload items from IndexedDB after CRUD operations
+  // Reload items from the server after CRUD operations
   const reloadAllItems = async () => {
     const key = getActiveVaultSession()?.key
     if (key) {
@@ -238,12 +238,12 @@ export function VaultPage({ onLock }) {
         setCurrentView('detail')
       }
 
-      // Reload items from IndexedDB to reflect changes immediately
+      // Reload items from the server to reflect changes immediately
       await reloadAllItems()
     } catch (error) {
       console.error('Failed to save item:', error)
       if (error.name === 'QuotaExceededError' || error.message.includes('Quota')) {
-        setStorageError('Storage quota exceeded. Your browser does not have enough space to save this file locally.')
+        setStorageError('Storage quota exceeded. Your vault could not save this file. Try again or contact support.')
       } else {
         setStorageError(`Failed to save: ${error.message || error}`)
       }
@@ -256,15 +256,21 @@ export function VaultPage({ onLock }) {
       if (type === 'password') await deleteVaultItem('password', id)
       else if (type === 'note') await deleteVaultItem('note', id)
       else if (type === 'file') await deleteVaultItem('file', id)
-
-      setSelectedItemId(null)
-      setCurrentView('list')
-
-      // Reload items from IndexedDB to reflect changes immediately
-      await reloadAllItems()
     } catch (error) {
       console.error('Delete failed:', error)
       setStorageError(`Failed to delete: ${error.message}`)
+    } finally {
+      // Always return to the list view so the dialog closes and any
+      // failure surfaces as the error banner in the list.
+      setSelectedItemId(null)
+      setCurrentView('list')
+
+      // Reload items from the server to reflect changes immediately
+      try {
+        await reloadAllItems()
+      } catch (error) {
+        console.error('Failed to reload items after delete:', error)
+      }
     }
   }
 
@@ -280,10 +286,10 @@ export function VaultPage({ onLock }) {
   }
 
   const getItemDetailsText = (item) => {
-    if (item.type === 'password') return item.username || '—'
+    if (item.type === 'password') return item.username || 'Unknown'
     if (item.type === 'note') return 'Secure Note'
     if (item.type === 'file') return `${shortFileType(item.mimeType)} · ${formatSize(item.size)}`
-    return '—'
+    return 'Unknown'
   }
 
   // Renders the main content area based on currentView
@@ -416,11 +422,11 @@ export function VaultPage({ onLock }) {
                 {!search && (
                   <p className="mt-1 max-w-sm text-body-sm text-on-surface-variant">
                     {activeNav === 'passwords'
-                      ? 'Add your first login to keep your credentials organized and available offline.'
+                      ? 'Add your first login to keep your credentials organized and accessible from any device.'
                       : activeNav === 'notes'
-                        ? 'Keep private notes organized and available whenever you need them.'
+                        ? 'Keep private notes organized and accessible whenever you need them.'
                         : activeNav === 'files'
-                          ? "Store important files locally so they're available even without an internet connection."
+                          ? "Store important files securely so they're available from any device."
                           : 'Add a password, secure note, or file to get started.'}
                   </p>
                 )}

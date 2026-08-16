@@ -1,5 +1,5 @@
 import { createContext, useCallback, useContext, useEffect, useMemo, useRef, useState } from 'react'
-import { clearActiveVaultSession } from '../vault/vaultService.js'
+import { clearActiveVaultSession, setAuthTokenGetter } from '../vault/vaultService.js'
 
 // ---------------------------------------------------------------------------
 // SECURITY NOTE — Why we do NOT use localStorage for the JWT
@@ -51,6 +51,19 @@ export function AuthProvider({ children }) {
   const [tokenExpiresAt, setTokenExpiresAt] = useState(null) // Date | null
 
   const expiryTimerRef = useRef(null)
+  const accessTokenRef = useRef(null)
+
+  // Keep ref in sync with state so vaultService can read the token
+  // without depending on React rendering cycles.
+  useEffect(() => {
+    accessTokenRef.current = accessToken
+  }, [accessToken])
+
+  // Wire vaultService's apiFetch to the current JWT once on mount.
+  useEffect(() => {
+    setAuthTokenGetter(() => accessTokenRef.current)
+    return () => setAuthTokenGetter(() => null)
+  }, [])
 
   // ------------------------------------------------------------------
   // Token expiry enforcement
@@ -69,6 +82,9 @@ export function AuthProvider({ children }) {
   const handleExpiry = useCallback(() => {
     // Clear the vault session — this mirrors lockVault() without the navigate
     // (navigation is handled by the RequireAuth guard reacting to accessToken === null)
+    // Ref write happens BEFORE setAccessToken so no authenticated request can
+    // observe a stale token in the same synchronous turn.
+    accessTokenRef.current = null
     clearActiveVaultSession()
     setAccessToken(null)
     setTokenExpiresAt(null)
@@ -113,6 +129,9 @@ export function AuthProvider({ children }) {
 
   const login = useCallback((token) => {
     const expiresAt = parseExpiry(token)
+    // Ref write happens BEFORE setAccessToken so the token is readable by
+    // vaultService's getAuthToken() immediately (no post-render race).
+    accessTokenRef.current = token
     setAccessToken(token)
     setTokenExpiresAt(expiresAt)
     scheduleExpiryTimer(expiresAt)
@@ -120,6 +139,9 @@ export function AuthProvider({ children }) {
 
   const logout = useCallback(() => {
     clearTimeout(expiryTimerRef.current)
+    // Ref write happens BEFORE setAccessToken so no request can observe the
+    // stale token after logout in the same synchronous turn.
+    accessTokenRef.current = null
     clearActiveVaultSession() // Lock the vault too — logout = full session wipe
     setAccessToken(null)
     setTokenExpiresAt(null)

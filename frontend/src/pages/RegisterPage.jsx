@@ -39,8 +39,9 @@ export function RegisterPage() {
   const [password, setPassword] = useState('')
   const [confirmPassword, setConfirmPassword] = useState('')
   const [error, setError] = useState('')
-  const [success, setSuccess] = useState('')
   const [isSubmitting, setIsSubmitting] = useState(false)
+  const [hasSubmitted, setHasSubmitted] = useState(false)
+  const [touched, setTouched] = useState({ email: false, password: false, confirmPassword: false })
 
   const emailError = useMemo(() => {
     if (!email.trim()) {
@@ -68,10 +69,16 @@ export function RegisterPage() {
     return ''
   }, [confirmPassword, password])
 
+  // Field errors only surface once the user has interacted with the field (blur)
+  // or attempted to submit — never on initial mount.
+  const markTouched = (field) => () => setTouched((prev) => ({ ...prev, [field]: true }))
+
+  const visibleError = (field, message) => (hasSubmitted || touched[field]) ? message : ''
+
   const handleSubmit = async (event) => {
     event.preventDefault()
     setError('')
-    setSuccess('')
+    setHasSubmitted(true)
 
     if (emailError) {
       setError(emailError)
@@ -90,16 +97,18 @@ export function RegisterPage() {
 
     setIsSubmitting(true)
 
+    const emailTrimmed = email.trim()
+
     try {
-      const emailTrimmed = email.trim()
       const authValue = await deriveAuthValue(password, emailTrimmed)
       await registerUser(emailTrimmed, authValue)
-      
-      setSuccess('Registration successful. You can now sign in.')
-      setEmail('')
-      setPassword('')
-      setConfirmPassword('')
-      window.setTimeout(() => navigate('/login'), 1200)
+
+      // Success — no automatic login. Send the user straight to the login page
+      // with the email pre-filled and a persistent notice (via route state).
+      navigate('/login', {
+        replace: true,
+        state: { email: emailTrimmed, message: 'Account created. Please sign in.' },
+      })
     } catch (err) {
       setError(getFriendlyErrorMessage(err))
     } finally {
@@ -126,7 +135,8 @@ export function RegisterPage() {
             placeholder="you@example.com"
             value={email}
             onChange={(event) => setEmail(event.target.value)}
-            error={emailError}
+            onBlur={markTouched('email')}
+            error={visibleError('email', emailError)}
             autoComplete="email"
             autoFocus
           />
@@ -138,7 +148,8 @@ export function RegisterPage() {
             showToggle
             value={password}
             onChange={(event) => setPassword(event.target.value)}
-            error={passwordError}
+            onBlur={markTouched('password')}
+            error={visibleError('password', passwordError)}
             autoComplete="new-password"
           />
 
@@ -149,19 +160,14 @@ export function RegisterPage() {
             showToggle
             value={confirmPassword}
             onChange={(event) => setConfirmPassword(event.target.value)}
-            error={confirmPasswordError}
+            onBlur={markTouched('confirmPassword')}
+            error={visibleError('confirmPassword', confirmPasswordError)}
             autoComplete="new-password"
           />
 
           {error && (
             <div className="rounded-lg border border-error/20 bg-error-container px-4 py-3 text-body-sm text-on-error-container">
               {error}
-            </div>
-          )}
-
-          {success && (
-            <div className="rounded-lg border border-success/20 bg-success-container px-4 py-3 text-body-sm text-on-success-container">
-              {success}
             </div>
           )}
 

@@ -5,7 +5,7 @@ import { ConfirmDialog } from '../ui/ConfirmDialog.jsx'
  * Detail view for a File entry.
  *
  * Props:
- *   item: The file object to display (from IndexedDB).
+ *   item: The file object to display (from the encrypted vault).
  *   onDelete: (Function) Called when "Delete" is clicked.
  *   onBack: (Function) Called to return to the list (used mainly on mobile).
  */
@@ -129,23 +129,26 @@ export function FileDetail({ item, onDelete, onBack }) {
             <span className="material-symbols-outlined text-[14px]">update</span>
             Added to Vault {timeString}
           </div>
-          <div className="flex items-center gap-1.5">
-            <span className="material-symbols-outlined text-[14px]">offline_pin</span>
-            Available Offline
-          </div>
         </div>
       </section>
 
       <ConfirmDialog 
         isOpen={isConfirmOpen}
         title="Delete file?"
-        message={<span><span className="font-label-bold text-on-surface">{item.name}</span> will be permanently removed from this device.</span>}
+        message={<span><span className="font-label-bold text-on-surface">{item.name}</span> will be permanently removed from your vault.</span>}
         confirmText="Delete"
         cancelText="Cancel"
         isProcessing={isDeleting}
         onConfirm={async () => {
           setIsDeleting(true)
-          await onDelete(item.id)
+          try {
+            await onDelete(item.id)
+          } catch {
+            // Parent (VaultPage) surfaces the failure; ensure dialog closes.
+          } finally {
+            setIsDeleting(false)
+            setIsConfirmOpen(false)
+          }
         }}
         onCancel={() => setIsConfirmOpen(false)}
       />

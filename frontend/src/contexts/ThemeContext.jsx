@@ -41,16 +41,12 @@ export function ThemeProvider({ children }) {
     return () => mq.removeEventListener('change', handleChange)
   }, [])
 
-  const toggleTheme = useCallback(() => {
-    setTheme((t) => (t === 'dark' ? 'light' : 'dark'))
-  }, [])
-
   const setThemeExplicit = useCallback((value) => {
     setTheme(value)
   }, [])
 
   return (
-    <ThemeContext.Provider value={{ theme, toggleTheme, setTheme: setThemeExplicit }}>
+    <ThemeContext.Provider value={{ theme, setTheme: setThemeExplicit }}>
       {children}
     </ThemeContext.Provider>
   )

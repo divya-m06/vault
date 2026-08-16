@@ -101,8 +101,8 @@ export function UnlockPage() {
               <span className="text-label-md">Zero-Knowledge Architecture</span>
             </div>
             <div className="flex items-center gap-2">
-              <span className="material-symbols-outlined text-[18px]" aria-hidden="true">wifi_off</span>
-              <span className="text-label-md">Works Offline</span>
+              <span className="material-symbols-outlined text-[18px]" aria-hidden="true">cloud_sync</span>
+              <span className="text-label-md">Encrypted Cloud Sync</span>
             </div>
           </div>
         </div>
@@ -133,7 +133,7 @@ export function UnlockPage() {
               </p>
             )}
             <p className="text-body-md text-on-surface-variant">
-              Enter your master password to decrypt your local vault.
+              Enter your master password to decrypt your vault.
             </p>
           </div>
 

@@ -152,14 +152,11 @@ export function FileForm({ onSave, onCancel, errorMessage, onClearError }) {
 
         <div className="flex items-center justify-between rounded-lg border border-surface-container-high bg-surface-bright p-3">
           <div className="flex items-center gap-3">
-            <span className="material-symbols-outlined text-[20px] text-on-surface-variant">offline_pin</span>
+            <span className="material-symbols-outlined text-[20px] text-on-surface-variant">cloud</span>
             <div>
-              <p className="text-label-bold text-on-surface">Available Offline</p>
-              <p className="mt-0.5 text-mono-label text-on-surface-variant">Stored locally on this device</p>
+              <p className="text-label-bold text-on-surface">Stored securely in Vault</p>
+              <p className="mt-0.5 text-mono-label text-on-surface-variant">Encrypted and saved to your account</p>
             </div>
-          </div>
-          <div className="flex h-5 w-9 items-center rounded-full bg-primary/90 px-1 opacity-70" aria-label="Stored locally on this device" title="This setting is informational in Stage 1">
-            <span className="block h-3.5 w-3.5 rounded-full bg-surface-container-lowest shadow-sm" />
           </div>
         </div>
 

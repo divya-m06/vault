@@ -1,19 +1,3 @@
-import { getVaultDB, clearAllVaultDBs } from '../db/db.js'
-
-export async function deriveEmailHash(email) {
-  const encoder = new TextEncoder()
-  const normalizedEmail = email.trim().toLowerCase()
-  const hashBuffer = await crypto.subtle.digest('SHA-256', encoder.encode(normalizedEmail))
-  return toHex(hashBuffer)
-}
-
-function getDb() {
-  const session = getActiveVaultSession()
-  if (!session || !session.db) throw new Error("Vault is locked or uninitialized")
-  return session.db
-}
-
-const VAULT_META_ID = 'vault'
 const DEFAULT_AUTO_LOCK_MINUTES = 15
 const KDF_ITERATIONS = 250000
 const KDF_ALGORITHM = 'PBKDF2-HMAC-SHA-256'
@@ -30,18 +14,8 @@ function normalizeBuffer(value) {
   return null
 }
 
-function asUint8Array(value) {
-  const buffer = normalizeBuffer(value)
-  if (!buffer) return new Uint8Array()
-  return new Uint8Array(buffer)
-}
-
 function toArrayBuffer(value) {
   return normalizeBuffer(value) || new ArrayBuffer(0)
-}
-
-function toHex(bytes) {
-  return Array.from(asUint8Array(bytes)).map((byte) => byte.toString(16).padStart(2, '0')).join('')
 }
 
 function arrayBufferToBase64(buffer) {
@@ -68,6 +42,25 @@ function base64ToArrayBuffer(base64) {
   }
 }
 
+function getAuthHeaders() {
+  const token = getAuthToken()
+  if (!token) throw new Error('Not authenticated')
+  return {
+    'Content-Type': 'application/json',
+    'Authorization': `Bearer ${token}`
+  }
+}
+
+let authTokenGetter = null
+export function setAuthTokenGetter(getter) {
+  authTokenGetter = getter
+}
+
+function getAuthToken() {
+  if (authTokenGetter) return authTokenGetter()
+  return null
+}
+
 export function getActiveVaultSession() {
   return activeSession
 }
@@ -78,7 +71,6 @@ export function setActiveVaultSession(session) {
 
 export function clearActiveVaultSession() {
   activeSession = null
-  clearAllVaultDBs()
 }
 
 export async function deriveKeyFromPassword(password, salt) {
@@ -176,39 +168,85 @@ export async function decryptJson(envelope, key) {
   return JSON.parse(new TextDecoder().decode(bytes))
 }
 
-export async function createVault(password, db, options = {}) {
-  const autoLockMinutes = options.autoLockMinutes ?? DEFAULT_AUTO_LOCK_MINUTES
-  const salt = createRandomSalt()
-  const key = await deriveKeyFromPassword(password, salt)
-  const verifier = crypto.getRandomValues(new Uint8Array(32))
-  const verifierIv = createRandomIv()
-  const verifierEnvelope = await encryptBytes(verifier, key, verifierIv)
+async function apiFetch(path, options = {}) {
+  const baseUrl = import.meta.env.VITE_API_BASE_URL?.trim()
+  if (!baseUrl) throw new Error('VITE_API_BASE_URL is not configured')
+  const url = `${baseUrl.replace(/\/$/, '')}${path}`
 
-  const meta = {
-    id: VAULT_META_ID,
-    cryptoVersion: CRYPTO_VERSION,
-    kdfAlgorithm: KDF_ALGORITHM,
-    kdfIterations: KDF_ITERATIONS,
-    kdfSalt: toArrayBuffer(salt),
-    verifierIv: verifierEnvelope.iv,
-    verifierCiphertext: verifierEnvelope.ciphertext,
-    autoLockMinutes
+  const response = await fetch(url, {
+    ...options,
+    headers: {
+      ...getAuthHeaders(),
+      ...options.headers
+    }
+  })
+
+  if (!response.ok) {
+    let message = 'Request failed'
+    try {
+      const data = await response.json()
+      message = data.detail || data.message || message
+    } catch {}
+    const error = new Error(message)
+    error.status = response.status
+    throw error
   }
 
-  await db.vaultMeta.put(meta)
-
-  return { key, meta }
+  if (response.status === 204) return null
+  return response.json()
 }
 
-export async function unlockVault(password, db) {
-  const meta = await db.vaultMeta.get(VAULT_META_ID)
-  if (!meta) {
-    return { ok: false, reason: 'missing-vault' }
+export async function initializeOrUnlockVault(password, email, options = {}) {
+  if (!email) throw new Error("Email is required to initialize or unlock the vault")
+  
+  const autoLockMinutes = options.autoLockMinutes ?? DEFAULT_AUTO_LOCK_MINUTES
+
+  let meta
+  let created = false
+  try {
+    meta = await apiFetch('/vault/meta')
+  } catch (error) {
+    if (error.status !== 404) throw error
   }
 
-  const key = await deriveKeyFromPassword(password, meta.kdfSalt)
+  if (!meta) {
+    const salt = createRandomSalt()
+    const key = await deriveKeyFromPassword(password, salt)
+    const verifier = crypto.getRandomValues(new Uint8Array(32))
+    const verifierIv = createRandomIv()
+    const verifierEnvelope = await encryptBytes(verifier, key, verifierIv)
+
+    const createPayload = {
+      crypto_version: CRYPTO_VERSION,
+      kdf_algorithm: KDF_ALGORITHM,
+      kdf_iterations: KDF_ITERATIONS,
+      kdf_salt: arrayBufferToBase64(salt),
+      verifier_iv: arrayBufferToBase64(verifierIv),
+      verifier_ciphertext: arrayBufferToBase64(verifierEnvelope.ciphertext),
+      auto_lock_minutes: autoLockMinutes
+    }
+
+    try {
+      meta = await apiFetch('/vault/meta', {
+        method: 'POST',
+        body: JSON.stringify(createPayload)
+      })
+      created = true
+    } catch (error) {
+      if (error.status === 409) {
+        meta = await apiFetch('/vault/meta')
+      } else {
+        throw error
+      }
+    }
+  }
+
+  const key = await deriveKeyFromPassword(password, base64ToArrayBuffer(meta.kdf_salt))
   try {
-    await decryptBytes({ iv: meta.verifierIv, ciphertext: meta.verifierCiphertext }, key)
+    await decryptBytes(
+      { iv: base64ToArrayBuffer(meta.verifier_iv), ciphertext: base64ToArrayBuffer(meta.verifier_ciphertext) },
+      key
+    )
   } catch (error) {
     return { ok: false, reason: 'invalid-password' }
   }
@@ -216,42 +254,10 @@ export async function unlockVault(password, db) {
   const session = {
     key,
     meta,
-    autoLockMinutes: meta.autoLockMinutes ?? DEFAULT_AUTO_LOCK_MINUTES
+    autoLockMinutes: meta.auto_lock_minutes ?? DEFAULT_AUTO_LOCK_MINUTES
   }
   setActiveVaultSession(session)
-  return { ok: true, session }
-}
-
-export async function initializeOrUnlockVault(password, email, options = {}) {
-  if (!email) throw new Error("Email is required to initialize or unlock the vault")
-  
-  const emailHash = await deriveEmailHash(email)
-  const db = getVaultDB(emailHash)
-
-  try {
-    const meta = await db.vaultMeta.get(VAULT_META_ID)
-    if (!meta) {
-      const created = await createVault(password, db, options)
-      const session = {
-        key: created.key,
-        meta: created.meta,
-        db,
-        autoLockMinutes: created.meta.autoLockMinutes ?? DEFAULT_AUTO_LOCK_MINUTES
-      }
-      setActiveVaultSession(session)
-      return { ok: true, created: true, session }
-    }
-
-    const unlocked = await unlockVault(password, db)
-    if (!unlocked.ok) return unlocked
-
-    unlocked.session.db = db
-    setActiveVaultSession(unlocked.session)
-    return unlocked
-  } catch (error) {
-    console.error('Original vault error:', error)
-    throw error
-  }
+  return { ok: true, session, created }
 }
 
 export async function lockVault() {
@@ -259,31 +265,22 @@ export async function lockVault() {
 }
 
 export async function updateAutoLockPreference(minutes) {
-  const meta = await getDb().vaultMeta.get(VAULT_META_ID)
-  if (!meta) return null
-  const nextMeta = { ...meta, autoLockMinutes: minutes }
-  await getDb().vaultMeta.put(nextMeta)
+  const response = await apiFetch('/vault/meta', {
+    method: 'PATCH',
+    body: JSON.stringify({ auto_lock_minutes: minutes })
+  })
   if (activeSession) {
     activeSession.autoLockMinutes = minutes
   }
-  return nextMeta
+  return response
 }
 
 export async function getAutoLockPreference() {
-  const meta = await getDb().vaultMeta.get(VAULT_META_ID)
-  return meta?.autoLockMinutes ?? DEFAULT_AUTO_LOCK_MINUTES
-}
-
-export function getVaultMeta() {
-  return getDb().vaultMeta.get(VAULT_META_ID)
-}
-
-async function getEncryptedStore(type) {
-  switch (type) {
-    case 'password': return getDb().encryptedPasswords
-    case 'note': return getDb().encryptedNotes
-    case 'file': return getDb().encryptedFiles
-    default: throw new Error(`Unsupported type: ${type}`)
+  try {
+    const meta = await apiFetch('/vault/meta')
+    return meta?.auto_lock_minutes ?? DEFAULT_AUTO_LOCK_MINUTES
+  } catch {
+    return DEFAULT_AUTO_LOCK_MINUTES
   }
 }
 
@@ -298,31 +295,28 @@ function buildPlainItem(record, type) {
 export async function loadVaultItems(key) {
   if (!key) return []
 
-  const [passwords, notes, files] = await Promise.all([
-    getDb().encryptedPasswords.toArray(),
-    getDb().encryptedNotes.toArray(),
-    getDb().encryptedFiles.toArray()
-  ])
+  const items = await apiFetch('/vault/items')
 
   const decryptEntries = async (entries, type) => {
     const decrypted = []
     for (const entry of entries) {
       try {
-        const payload = await decryptJson({ iv: entry.iv, ciphertext: entry.ciphertext }, key)
+        const payload = await decryptJson({ iv: base64ToArrayBuffer(entry.iv), ciphertext: base64ToArrayBuffer(entry.ciphertext) }, key)
         const item = buildPlainItem(payload, type)
         if (item) {
+          // The server row id is canonical; the id embedded in the encrypted
+          // payload is only a client-side placeholder and must not be used for
+          // DELETE/PATCH URL routing.
+          item.id = entry.id
           if (type === 'file') {
             let decodedBytes = new ArrayBuffer(0)
             if (payload.fileBytes) {
               if (typeof payload.fileBytes === 'string') {
-                // Base64-encoded file bytes from current format
                 decodedBytes = base64ToArrayBuffer(payload.fileBytes)
               } else if (payload.fileBytes instanceof ArrayBuffer || ArrayBuffer.isView(payload.fileBytes)) {
-                // Direct ArrayBuffer/Uint8Array (shouldn't happen from JSON, but handle it)
                 decodedBytes = toArrayBuffer(payload.fileBytes)
               }
             } else {
-              // Legacy record with missing fileBytes - lost during old JSON serialization
               console.warn(`File record ${entry.id} has no file bytes (legacy or corrupted). File will be empty.`)
             }
             item.blob = new Blob([decodedBytes], { type: payload.mimeType || 'application/octet-stream' })
@@ -336,10 +330,17 @@ export async function loadVaultItems(key) {
     return decrypted
   }
 
+  const byType = { password: [], note: [], file: [] }
+  for (const entry of items) {
+    if (byType[entry.item_type]) {
+      byType[entry.item_type].push(entry)
+    }
+  }
+
   const [decryptedPasswords, decryptedNotes, decryptedFiles] = await Promise.all([
-    decryptEntries(passwords, 'password'),
-    decryptEntries(notes, 'note'),
-    decryptEntries(files, 'file')
+    decryptEntries(byType.password, 'password'),
+    decryptEntries(byType.note, 'note'),
+    decryptEntries(byType.file, 'file')
   ])
 
   return [...decryptedPasswords, ...decryptedNotes, ...decryptedFiles].sort((a, b) => (b.updatedAt || b.createdAt || 0) - (a.updatedAt || a.createdAt || 0))
@@ -348,7 +349,6 @@ export async function loadVaultItems(key) {
 export async function saveVaultItem(type, payload, key) {
   if (!key) throw new Error('Vault is locked')
 
-  const store = await getEncryptedStore(type)
   const now = Date.now()
   const recordId = payload.id || crypto.randomUUID()
   const data = {
@@ -372,8 +372,16 @@ export async function saveVaultItem(type, payload, key) {
       updatedAt: data.updatedAt
     }
     const encrypted = await encryptJson(itemPayload, key)
-    await store.put({ id: recordId, cryptoVersion: CRYPTO_VERSION, iv: encrypted.iv, ciphertext: encrypted.ciphertext })
-    return { ...itemPayload, id: recordId, fileBytes: fileBytes || null, blob: payload.blob ? payload.blob : new Blob([toArrayBuffer(fileBytes)], { type: payload.type || 'application/octet-stream' }) }
+    const created = await apiFetch('/vault/items', {
+      method: 'POST',
+      body: JSON.stringify({
+        item_type: type,
+        iv: arrayBufferToBase64(encrypted.iv),
+        ciphertext: arrayBufferToBase64(encrypted.ciphertext),
+        crypto_version: CRYPTO_VERSION
+      })
+    })
+    return { ...itemPayload, id: created.id, fileBytes: fileBytes || null, blob: payload.blob ? payload.blob : new Blob([toArrayBuffer(fileBytes)], { type: payload.type || 'application/octet-stream' }) }
   }
 
   const itemPayload = {
@@ -383,15 +391,20 @@ export async function saveVaultItem(type, payload, key) {
     updatedAt: data.updatedAt
   }
   const encrypted = await encryptJson(itemPayload, key)
-  await store.put({ id: recordId, cryptoVersion: CRYPTO_VERSION, iv: encrypted.iv, ciphertext: encrypted.ciphertext })
-  return { ...itemPayload, id: recordId }
+  const created = await apiFetch('/vault/items', {
+    method: 'POST',
+    body: JSON.stringify({
+      item_type: type,
+      iv: arrayBufferToBase64(encrypted.iv),
+      ciphertext: arrayBufferToBase64(encrypted.ciphertext),
+      crypto_version: CRYPTO_VERSION
+    })
+  })
+  return { ...itemPayload, id: created.id }
 }
 
 export async function updateVaultItem(type, payload, key) {
   if (!key) throw new Error('Vault is locked')
-  const store = await getEncryptedStore(type)
-  const existing = await store.get(payload.id)
-  if (!existing) throw new Error('Missing encrypted record')
 
   const now = Date.now()
   const data = {
@@ -414,7 +427,13 @@ export async function updateVaultItem(type, payload, key) {
       updatedAt: data.updatedAt
     }
     const encrypted = await encryptJson(itemPayload, key)
-    await store.put({ id: data.id, cryptoVersion: CRYPTO_VERSION, iv: encrypted.iv, ciphertext: encrypted.ciphertext })
+    await apiFetch(`/vault/items/${data.id}`, {
+      method: 'PATCH',
+      body: JSON.stringify({
+        iv: arrayBufferToBase64(encrypted.iv),
+        ciphertext: arrayBufferToBase64(encrypted.ciphertext)
+      })
+    })
     return { ...itemPayload, id: data.id, fileBytes: fileBytes || null, blob: payload.blob ? payload.blob : new Blob([toArrayBuffer(fileBytes)], { type: payload.type || 'application/octet-stream' }) }
   }
 
@@ -425,30 +444,18 @@ export async function updateVaultItem(type, payload, key) {
     updatedAt: data.updatedAt
   }
   const encrypted = await encryptJson(itemPayload, key)
-  await store.put({ id: data.id, cryptoVersion: CRYPTO_VERSION, iv: encrypted.iv, ciphertext: encrypted.ciphertext })
+  await apiFetch(`/vault/items/${data.id}`, {
+    method: 'PATCH',
+    body: JSON.stringify({
+      iv: arrayBufferToBase64(encrypted.iv),
+      ciphertext: arrayBufferToBase64(encrypted.ciphertext)
+    })
+  })
   return { ...itemPayload, id: data.id }
 }
 
 export async function deleteVaultItem(type, id) {
-  const store = await getEncryptedStore(type)
-  await store.delete(id)
-}
-
-
-
-export async function getVaultSnapshot() {
-  const meta = await getDb().vaultMeta.get(VAULT_META_ID)
-  return {
-    meta,
-    session: activeSession,
-    hasSensitiveStorage: typeof window !== 'undefined' && (
-      window.localStorage.getItem('vault-master-password') !== null ||
-      window.sessionStorage.getItem('vault-master-password') !== null ||
-      document.cookie.includes('vault-master-password')
-    )
-  }
-}
-
-export function getStorageFingerprint(bytes) {
-  return toHex(bytes)
+  await apiFetch(`/vault/items/${id}`, {
+    method: 'DELETE'
+  })
 }

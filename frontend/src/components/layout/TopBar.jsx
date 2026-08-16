@@ -97,16 +97,6 @@ export function TopBar({ onMenuToggle, searchValue, onSearchChange }) {
 
       {/* ── Right: sync status + actions ─────────────────────────────── */}
       <div className="flex items-center gap-3 shrink-0">
-        {/* Offline badge */}
-        <div
-          className="hidden sm:flex items-center gap-1.5 text-primary dark:text-[#83d2e6]"
-          title="Stored locally on this device"
-          aria-label="Vault available offline"
-        >
-          <span className="w-2 h-2 rounded-full bg-primary dark:bg-[#83d2e6] block" aria-hidden="true" />
-          <span className="text-label-md font-medium">Available Offline</span>
-        </div>
-
         <button id="topbar-sync-btn" className="btn-icon" aria-label="Sync vault" title="Sync vault" disabled>
           <span className="material-symbols-outlined text-[20px]" aria-hidden="true">sync</span>
         </button>
@@ -139,7 +129,7 @@ export function TopBar({ onMenuToggle, searchValue, onSearchChange }) {
                   className="mt-0.5 truncate text-body-md font-medium text-on-surface dark:text-[#e4e8f5]"
                   title={email ?? ''}
                 >
-                  {email ?? '—'}
+                  {email ?? 'Account'}
                 </p>
               </div>
 

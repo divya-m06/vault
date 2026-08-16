@@ -63,6 +63,14 @@
     @apply focus:outline-none focus:ring-2 focus:ring-primary-container focus:ring-offset-1 focus:ring-offset-surface-container-lowest;
   }
 
+  /* Hide browser-native password reveal icons (e.g. Edge's ::-ms-reveal) so
+     they don't render a second eye icon that overlaps our custom show/hide
+     toggle inside password inputs. */
+  input[type="password"]::-ms-reveal,
+  input[type="password"]::-ms-clear {
+    display: none;
+  }
+
   /* Input field — default state */
   /* NOTE: Do NOT put dark:/hover: variants inside @apply — Tailwind v3 does not
      support variant-prefixed utilities in @apply. Dark overrides live below

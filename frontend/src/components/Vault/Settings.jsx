@@ -3,39 +3,9 @@ import packageJson from '../../../package.json'
 import { getAutoLockPreference, updateAutoLockPreference } from '../../vault/vaultService.js'
 import { useTheme } from '../../contexts/ThemeContext.jsx'
 
-function formatBytes(bytes) {
-  if (!Number.isFinite(bytes) || bytes <= 0) return '—'
-  const units = ['B', 'KB', 'MB', 'GB']
-  let value = bytes
-  let unitIndex = 0
-  while (value >= 1024 && unitIndex < units.length - 1) {
-    value /= 1024
-    unitIndex += 1
-  }
-  return `${value.toFixed(value >= 10 || unitIndex === 0 ? 0 : 1)} ${units[unitIndex]}`
-}
-
 export function Settings() {
-  const [storageEstimate, setStorageEstimate] = useState(null)
-  const [storageError, setStorageError] = useState(null)
   const [autoLockMinutes, setAutoLockMinutes] = useState(15)
   const { theme, setTheme } = useTheme()
-
-  useEffect(() => {
-    if (!navigator.storage?.estimate) {
-      setStorageEstimate(null)
-      return
-    }
-
-    navigator.storage.estimate().then((estimate) => {
-      setStorageEstimate({
-        used: estimate.usage || 0,
-        quota: estimate.quota || 0
-      })
-    }).catch(() => {
-      setStorageError('Storage usage is unavailable in this browser.')
-    })
-  }, [])
 
   useEffect(() => {
     let active = true
@@ -60,7 +30,7 @@ export function Settings() {
     <div className="mx-auto flex w-full max-w-[920px] flex-col gap-4">
       <div className="flex flex-col gap-1">
         <h2 className="text-headline-md text-on-surface dark:text-[#e4e8f5]">Settings</h2>
-        <p className="text-body-md text-on-surface-variant dark:text-[#a0aec0]">Manage your local Vault preferences.</p>
+        <p className="text-body-md text-on-surface-variant dark:text-[#a0aec0]">Manage your Vault preferences.</p>
       </div>
 
       {/* ── Appearance ──────────────────────────────────────────────── */}
@@ -130,26 +100,15 @@ export function Settings() {
         </div>
       </section>
 
-      {/* ── Local Storage ────────────────────────────────────────────── */}
+      {/* ── Cloud Storage ────────────────────────────────────────────── */}
       <section className="overflow-hidden rounded-lg border border-outline-variant bg-surface-container-lowest shadow-sm dark:border-[#2a3040] dark:bg-[#141820]">
         <div className="border-b border-outline-variant bg-surface-container-low px-4 py-3 dark:border-[#2a3040] dark:bg-[#1a1f2e]">
-          <h3 className="text-label-bold uppercase tracking-wide text-on-surface-variant dark:text-[#6b7280]">Local Storage</h3>
+          <h3 className="text-label-bold uppercase tracking-wide text-on-surface-variant dark:text-[#6b7280]">Cloud Storage</h3>
         </div>
         <div className="flex flex-col gap-3 p-4 sm:p-5">
           <div className="rounded-md border border-outline-variant bg-surface-container-low p-3 dark:border-[#2a3040] dark:bg-[#1a1f2e]">
-            <p className="text-body-md text-on-surface dark:text-[#e4e8f5]">Vault data is stored locally in this browser using IndexedDB.</p>
-            <div className="mt-3 flex flex-wrap items-center gap-2 text-body-sm text-on-surface-variant dark:text-[#a0aec0]">
-              <span className="font-medium text-on-surface dark:text-[#e4e8f5]">Available Offline</span>
-              {storageEstimate ? (
-                <span>• Storage used: {formatBytes(storageEstimate.used)}</span>
-              ) : (
-                <span>• Storage usage unavailable in this browser</span>
-              )}
-            </div>
-            <p className="mt-3 text-body-sm text-on-surface-variant dark:text-[#a0aec0]">Clearing browser site data may remove locally stored Vault data.</p>
-            {storageError && (
-              <p className="mt-2 text-body-sm text-on-surface-variant dark:text-[#a0aec0]">{storageError}</p>
-            )}
+            <p className="text-body-md text-on-surface dark:text-[#e4e8f5]">Your encrypted vault is stored securely on our servers.</p>
+            <p className="mt-2 text-body-sm text-on-surface-variant dark:text-[#a0aec0]">Only you can decrypt your data: the server never sees your master password or encryption keys.</p>
           </div>
         </div>
       </section>
@@ -195,11 +154,11 @@ export function Settings() {
         <div className="flex flex-col gap-3 p-4 sm:p-5">
           <div className="rounded-md border border-outline-variant bg-surface-container-low p-3 dark:border-[#2a3040] dark:bg-[#1a1f2e]">
             <p className="text-headline-sm text-on-surface dark:text-[#e4e8f5]">Vault</p>
-            <p className="mt-1 text-body-md text-on-surface-variant dark:text-[#a0aec0]">Offline-first password, notes, and file manager.</p>
+            <p className="mt-1 text-body-md text-on-surface-variant dark:text-[#a0aec0]">Cloud-synced password, notes, and file manager.</p>
             <div className="mt-3 flex flex-wrap items-center gap-3 text-body-sm text-on-surface-variant dark:text-[#a0aec0]">
-              <span>Storage: IndexedDB</span>
+              <span>Storage: Encrypted PostgreSQL</span>
               <span>•</span>
-              <span>Local database layer: Dexie.js</span>
+              <span>Client-side AES-GCM encryption</span>
               {appVersion && (
                 <>
                   <span>•</span>
